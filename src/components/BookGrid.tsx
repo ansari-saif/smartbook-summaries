@@ -1,6 +1,6 @@
 
 import { motion } from "framer-motion";
-import { Books } from "lucide-react";
+import { Book } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 
@@ -31,7 +31,7 @@ export const BookGrid = ({ books, onBookSelect, onBookRemove }: BookGridProps) =
         >
           <Card className="glass-panel p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <Books className="h-8 w-8 text-primary" />
+              <Book className="h-8 w-8 text-primary" />
               <Button
                 variant="ghost"
                 size="sm"
@@ -59,3 +59,4 @@ export const BookGrid = ({ books, onBookSelect, onBookRemove }: BookGridProps) =
     </div>
   );
 };
+
