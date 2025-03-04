@@ -161,7 +161,7 @@ const Index = () => {
               </AnimatePresence>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="bookName">Book Name</Label>
                 <Input
@@ -172,29 +172,31 @@ const Index = () => {
                   className="bg-background-light border-white/10"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="startPage">Start Page</Label>
-                <Input
-                  id="startPage"
-                  type="number"
-                  value={startPage}
-                  onChange={(e) => setStartPage(e.target.value)}
-                  placeholder="Enter start page"
-                  min="1"
-                  className="bg-background-light border-white/10"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="endPage">End Page</Label>
-                <Input
-                  id="endPage"
-                  type="number"
-                  value={endPage}
-                  onChange={(e) => setEndPage(e.target.value)}
-                  placeholder="Enter end page"
-                  min="1"
-                  className="bg-background-light border-white/10"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="startPage">Start Page</Label>
+                  <Input
+                    id="startPage"
+                    type="number"
+                    value={startPage}
+                    onChange={(e) => setStartPage(e.target.value)}
+                    placeholder="Enter start page"
+                    min="1"
+                    className="bg-background-light border-white/10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="endPage">End Page</Label>
+                  <Input
+                    id="endPage"
+                    type="number"
+                    value={endPage}
+                    onChange={(e) => setEndPage(e.target.value)}
+                    placeholder="Enter end page"
+                    min="1"
+                    className="bg-background-light border-white/10"
+                  />
+                </div>
               </div>
             </div>
 
