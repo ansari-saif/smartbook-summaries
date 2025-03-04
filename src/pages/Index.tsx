@@ -56,6 +56,28 @@ const Index = () => {
         startPage: parseInt(startPage),
         endPage: parseInt(endPage)
       };
+
+      // New API call to process the PDF
+      const formData = new FormData();
+      formData.append('pdf_file', selectedFile);
+      formData.append('search_strings', JSON.stringify(currentBook.chapters));
+      formData.append('start', startPage);
+      formData.append('end', endPage);
+      formData.append('book_name', bookName);
+
+      fetch('http://localhost:8000/process-pdf', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log('Success:', data);
+        // Optionally handle the response data here
+      })
+      .catch((error) => {
+        console.error('Error:', error);
+      });
+
       setBooks(prev => [...prev, newBook]);
       setSelectedFile(null);
       setCurrentBook({ chapters: ['Chapter 1'] });
