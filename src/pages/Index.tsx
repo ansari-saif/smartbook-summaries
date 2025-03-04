@@ -1,12 +1,15 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, X, Upload, ArrowRight } from 'lucide-react';
+import { Plus, X, Upload } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { BookGrid, Book } from '@/components/BookGrid';
 
 const Index = () => {
-  const [chapters, setChapters] = useState<string[]>(['Chapter 1']);
+  const [books, setBooks] = useState<Book[]>([]);
+  const [currentBook, setCurrentBook] = useState<{ chapters: string[] }>({ chapters: ['Chapter 1'] });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const navigate = useNavigate();
 
@@ -18,109 +21,163 @@ const Index = () => {
   };
 
   const addChapter = () => {
-    setChapters([...chapters, `Chapter ${chapters.length + 1}`]);
+    setCurrentBook(prev => ({
+      ...prev,
+      chapters: [...prev.chapters, `Chapter ${prev.chapters.length + 1}`]
+    }));
   };
 
   const removeChapter = (index: number) => {
-    setChapters(chapters.filter((_, i) => i !== index));
+    setCurrentBook(prev => ({
+      ...prev,
+      chapters: prev.chapters.filter((_, i) => i !== index)
+    }));
   };
 
   const updateChapterName = (index: number, name: string) => {
-    const newChapters = [...chapters];
-    newChapters[index] = name;
-    setChapters(newChapters);
+    setCurrentBook(prev => ({
+      ...prev,
+      chapters: prev.chapters.map((chapter, i) => (i === index ? name : chapter))
+    }));
   };
 
-  const handleSubmit = () => {
-    if (selectedFile && chapters.length > 0) {
-      navigate('/summary');
+  const handleAddBook = () => {
+    if (selectedFile && currentBook.chapters.length > 0) {
+      const newBook: Book = {
+        id: Math.random().toString(36).substr(2, 9),
+        title: selectedFile.name.replace('.pdf', ''),
+        chapters: currentBook.chapters,
+        file: selectedFile
+      };
+      setBooks(prev => [...prev, newBook]);
+      setSelectedFile(null);
+      setCurrentBook({ chapters: ['Chapter 1'] });
     }
+  };
+
+  const handleBookRemove = (id: string) => {
+    setBooks(prev => prev.filter(book => book.id !== id));
+  };
+
+  const handleBookSelect = (book: Book) => {
+    // Store the selected book in localStorage or state management
+    localStorage.setItem('selectedBook', JSON.stringify(book));
+    navigate('/summary');
   };
 
   return (
     <div className="min-h-screen bg-background p-6 animate-in">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <header className="text-center space-y-4">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <motion.header
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center space-y-4"
+        >
           <h1 className="text-4xl font-bold text-primary-contrast">
-            Refine Your Book with AI
+            Refine Your Books with AI
           </h1>
           <p className="text-lg text-gray-400">
             Keep the meaning, cut the fluff!
           </p>
-        </header>
+        </motion.header>
 
-        <Card className="glass-panel p-6 space-y-6">
-          <div className="space-y-4">
-            <label className="block text-lg font-medium text-primary-contrast">
-              Upload Your Book
-            </label>
-            <div className="flex justify-center">
-              <label className="w-full cursor-pointer">
-                <div className="border-2 border-dashed border-primary/50 rounded-lg p-8 text-center hover:border-primary transition-colors">
-                  <Upload className="mx-auto h-12 w-12 text-primary mb-4" />
-                  <p className="text-sm text-gray-400">
-                    {selectedFile ? selectedFile.name : 'Drop your PDF here or click to upload'}
-                  </p>
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept=".pdf"
-                    onChange={handleFileChange}
-                  />
-                </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-8"
+        >
+          <Card className="glass-panel p-6 space-y-6">
+            <div className="space-y-4">
+              <label className="block text-lg font-medium text-primary-contrast">
+                Upload A New Book
               </label>
+              <div className="flex justify-center">
+                <label className="w-full cursor-pointer">
+                  <div className="border-2 border-dashed border-primary/50 rounded-lg p-8 text-center hover:border-primary transition-colors">
+                    <Upload className="mx-auto h-12 w-12 text-primary mb-4" />
+                    <p className="text-sm text-gray-400">
+                      {selectedFile ? selectedFile.name : 'Drop your PDF here or click to upload'}
+                    </p>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf"
+                      onChange={handleFileChange}
+                    />
+                  </div>
+                </label>
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <label className="text-lg font-medium text-primary-contrast">
-                Chapter Names
-              </label>
-              <Button
-                onClick={addChapter}
-                variant="outline"
-                size="icon"
-                className="rounded-full hover:bg-primary/20"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="space-y-3">
-              {chapters.map((chapter, index) => (
-                <div
-                  key={index}
-                  className="flex items-center space-x-3 animate-slideUp"
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <label className="text-lg font-medium text-primary-contrast">
+                  Chapter Names
+                </label>
+                <Button
+                  onClick={addChapter}
+                  variant="outline"
+                  size="icon"
+                  className="rounded-full hover:bg-primary/20"
                 >
-                  <input
-                    type="text"
-                    value={chapter}
-                    onChange={(e) => updateChapterName(index, e.target.value)}
-                    className="flex-1 bg-background-light rounded-lg px-4 py-2 text-primary-contrast border border-white/10 focus:border-primary outline-none"
-                  />
-                  <Button
-                    onClick={() => removeChapter(index)}
-                    variant="ghost"
-                    size="icon"
-                    className="hover:bg-destructive/20"
-                    disabled={chapters.length === 1}
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              <AnimatePresence>
+                {currentBook.chapters.map((chapter, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className="flex items-center space-x-3"
                   >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+                    <input
+                      type="text"
+                      value={chapter}
+                      onChange={(e) => updateChapterName(index, e.target.value)}
+                      className="flex-1 bg-background-light rounded-lg px-4 py-2 text-primary-contrast border border-white/10 focus:border-primary outline-none"
+                    />
+                    <Button
+                      onClick={() => removeChapter(index)}
+                      variant="ghost"
+                      size="icon"
+                      className="hover:bg-destructive/20"
+                      disabled={currentBook.chapters.length === 1}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
-          </div>
 
-          <Button
-            onClick={handleSubmit}
-            className="w-full button-gradient"
-            disabled={!selectedFile}
-          >
-            <span>Generate Summaries</span>
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </Card>
+            <Button
+              onClick={handleAddBook}
+              className="w-full button-gradient"
+              disabled={!selectedFile}
+            >
+              Add Book
+            </Button>
+          </Card>
+
+          {books.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              <h2 className="text-2xl font-semibold text-primary-contrast mb-6">
+                Your Books
+              </h2>
+              <BookGrid
+                books={books}
+                onBookSelect={handleBookSelect}
+                onBookRemove={handleBookRemove}
+              />
+            </motion.div>
+          )}
+        </motion.div>
       </div>
     </div>
   );
