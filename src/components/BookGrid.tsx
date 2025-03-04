@@ -7,15 +7,16 @@ export interface Book {
   id: string;
   title: string;
   chapters: string[];
-  file: File;
+  file?: File;
   bookName: string;
-  startPage: number;
-  endPage: number;
+  startPage?: number;
+  endPage?: number;
+  chapter_count?: number;
 }
 
 interface BookGridProps {
   books: Book[];
-  onBookSelect: (book: Book) => void;
+  onBookSelect: (book_name: string) => void;
   onBookRemove: (id: string) => void;
 }
 
@@ -51,9 +52,9 @@ export const BookGrid = ({ books, onBookSelect, onBookRemove }: BookGridProps) =
             </p>
             <Button
               className="w-full button-gradient"
-              onClick={() => onBookSelect(book)}
+              onClick={() => onBookSelect(book.title)}
             >
-              Generate Summary
+              Read Now ...
             </Button>
           </Card>
         </motion.div>

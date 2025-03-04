@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, X, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,6 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BookGrid, Book } from '@/components/BookGrid';
 
+interface APIBook {
+  book_name: string;
+  chapter_count: number;
+}
+
 const Index = () => {
   const [books, setBooks] = useState<Book[]>([]);
   const [currentBook, setCurrentBook] = useState<{ chapters: string[] }>({ chapters: ['Chapter 1'] });
@@ -16,6 +21,26 @@ const Index = () => {
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetch('http://localhost:8000/books')
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'success') {
+          const apiBooks = data.books.map((apiBook: APIBook) => ({
+            id: Math.random().toString(36).substr(2, 9),
+            title: apiBook.book_name,
+            bookName: apiBook.book_name,
+            chapters: Array(apiBook.chapter_count).fill('').map((_, i) => `Chapter ${i + 1}`),
+            chapter_count: apiBook.chapter_count
+          }));
+          setBooks(apiBooks);
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching books:', error);
+      });
+  }, []);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -49,7 +74,7 @@ const Index = () => {
     if (selectedFile && currentBook.chapters.length > 0 && bookName && startPage && endPage) {
       const newBook: Book = {
         id: Math.random().toString(36).substr(2, 9),
-        title: selectedFile.name.replace('.pdf', ''),
+        title: bookName,
         chapters: currentBook.chapters,
         file: selectedFile,
         bookName: bookName,
@@ -57,7 +82,6 @@ const Index = () => {
         endPage: parseInt(endPage)
       };
 
-      // New API call to process the PDF
       const formData = new FormData();
       formData.append('pdf_file', selectedFile);
       formData.append('search_strings', JSON.stringify(currentBook.chapters));
@@ -72,7 +96,6 @@ const Index = () => {
       .then(response => response.json())
       .then(data => {
         console.log('Success:', data);
-        // Optionally handle the response data here
       })
       .catch((error) => {
         console.error('Error:', error);
@@ -91,9 +114,9 @@ const Index = () => {
     setBooks(prev => prev.filter(book => book.id !== id));
   };
 
-  const handleBookSelect = (book: Book) => {
-    localStorage.setItem('selectedBook', JSON.stringify(book));
-    navigate('/summary');
+  const handleBookSelect = (book_name: string) => {
+    // localStorage.setItem('selectedBook', JSON.stringify(book));
+    navigate(`/summary?book=${book_name}`);
   };
 
   return (
