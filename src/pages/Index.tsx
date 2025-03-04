@@ -1,16 +1,20 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, X, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { BookGrid, Book } from '@/components/BookGrid';
 
 const Index = () => {
   const [books, setBooks] = useState<Book[]>([]);
   const [currentBook, setCurrentBook] = useState<{ chapters: string[] }>({ chapters: ['Chapter 1'] });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [bookName, setBookName] = useState('');
+  const [startPage, setStartPage] = useState('');
+  const [endPage, setEndPage] = useState('');
   const navigate = useNavigate();
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,16 +46,22 @@ const Index = () => {
   };
 
   const handleAddBook = () => {
-    if (selectedFile && currentBook.chapters.length > 0) {
+    if (selectedFile && currentBook.chapters.length > 0 && bookName && startPage && endPage) {
       const newBook: Book = {
         id: Math.random().toString(36).substr(2, 9),
         title: selectedFile.name.replace('.pdf', ''),
         chapters: currentBook.chapters,
-        file: selectedFile
+        file: selectedFile,
+        bookName: bookName,
+        startPage: parseInt(startPage),
+        endPage: parseInt(endPage)
       };
       setBooks(prev => [...prev, newBook]);
       setSelectedFile(null);
       setCurrentBook({ chapters: ['Chapter 1'] });
+      setBookName('');
+      setStartPage('');
+      setEndPage('');
     }
   };
 
@@ -60,7 +70,6 @@ const Index = () => {
   };
 
   const handleBookSelect = (book: Book) => {
-    // Store the selected book in localStorage or state management
     localStorage.setItem('selectedBook', JSON.stringify(book));
     navigate('/summary');
   };
@@ -150,6 +159,43 @@ const Index = () => {
                   </motion.div>
                 ))}
               </AnimatePresence>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="bookName">Book Name</Label>
+                <Input
+                  id="bookName"
+                  value={bookName}
+                  onChange={(e) => setBookName(e.target.value)}
+                  placeholder="Enter book name"
+                  className="bg-background-light border-white/10"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="startPage">Start Page</Label>
+                <Input
+                  id="startPage"
+                  type="number"
+                  value={startPage}
+                  onChange={(e) => setStartPage(e.target.value)}
+                  placeholder="Enter start page"
+                  min="1"
+                  className="bg-background-light border-white/10"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endPage">End Page</Label>
+                <Input
+                  id="endPage"
+                  type="number"
+                  value={endPage}
+                  onChange={(e) => setEndPage(e.target.value)}
+                  placeholder="Enter end page"
+                  min="1"
+                  className="bg-background-light border-white/10"
+                />
+              </div>
             </div>
 
             <Button

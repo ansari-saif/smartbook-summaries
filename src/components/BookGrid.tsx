@@ -1,4 +1,3 @@
-
 import { motion } from "framer-motion";
 import { Book } from "lucide-react";
 import { Button } from "./ui/button";
@@ -9,6 +8,9 @@ export interface Book {
   title: string;
   chapters: string[];
   file: File;
+  bookName: string;
+  startPage: number;
+  endPage: number;
 }
 
 interface BookGridProps {
@@ -59,4 +61,3 @@ export const BookGrid = ({ books, onBookSelect, onBookRemove }: BookGridProps) =
     </div>
   );
 };
-
