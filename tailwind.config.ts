@@ -19,6 +19,9 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        inter: ['Inter', 'sans-serif'],
+      },
       colors: {
         primary: {
           DEFAULT: "#4F46E5",
