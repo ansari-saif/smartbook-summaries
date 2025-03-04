@@ -117,7 +117,43 @@ const Index = () => {
                 </label>
               </div>
             </div>
-
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="bookName">Book Name</Label>
+                <Input
+                  id="bookName"
+                  value={bookName}
+                  onChange={(e) => setBookName(e.target.value)}
+                  placeholder="Enter book name"
+                  className="bg-background-light border-white/10"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="startPage">Start Page</Label>
+                  <Input
+                    id="startPage"
+                    type="number"
+                    value={startPage}
+                    onChange={(e) => setStartPage(e.target.value)}
+                    placeholder="Enter start page"
+                    min="1"
+                    className="bg-background-light border-white/10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="endPage">End Page</Label>
+                  <Input
+                    id="endPage"
+                    type="number"
+                    value={endPage}
+                    onChange={(e) => setEndPage(e.target.value)}
+                    placeholder="Enter end page"
+                    min="1"
+                    className="bg-background-light border-white/10"
+                  />
+                </div>
+              </div>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <label className="text-lg font-medium text-primary-contrast">
@@ -161,43 +197,8 @@ const Index = () => {
               </AnimatePresence>
             </div>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="bookName">Book Name</Label>
-                <Input
-                  id="bookName"
-                  value={bookName}
-                  onChange={(e) => setBookName(e.target.value)}
-                  placeholder="Enter book name"
-                  className="bg-background-light border-white/10"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="startPage">Start Page</Label>
-                  <Input
-                    id="startPage"
-                    type="number"
-                    value={startPage}
-                    onChange={(e) => setStartPage(e.target.value)}
-                    placeholder="Enter start page"
-                    min="1"
-                    className="bg-background-light border-white/10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="endPage">End Page</Label>
-                  <Input
-                    id="endPage"
-                    type="number"
-                    value={endPage}
-                    onChange={(e) => setEndPage(e.target.value)}
-                    placeholder="Enter end page"
-                    min="1"
-                    className="bg-background-light border-white/10"
-                  />
-                </div>
-              </div>
+            
+              
             </div>
 
             <Button
