@@ -23,7 +23,7 @@ const Summary = () => {
       return;
     }
 
-    fetch(`http://localhost:8000/book-details?book_name=${encodeURIComponent(bookName)}`)
+    fetch(`http://13.233.150.127:8000/book-details?book_name=${encodeURIComponent(bookName)}`)
       .then(response => response.json())
       .then(data => {
         if (data.status === 'success') {
@@ -47,7 +47,7 @@ const Summary = () => {
     const currentChapterName = chapters[currentChapter];
     try {
       const response = await fetch(
-        `http://localhost:8000/chapter-pdf?book_name=${encodeURIComponent(bookDetails.book_name)}&chapter_name=${encodeURIComponent(currentChapterName)}`,
+        `http://13.233.150.127:8000/chapter-pdf?book_name=${encodeURIComponent(bookDetails.book_name)}&chapter_name=${encodeURIComponent(currentChapterName)}`,
         { method: 'GET' }
       );
       

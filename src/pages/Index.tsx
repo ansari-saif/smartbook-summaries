@@ -23,7 +23,7 @@ const Index = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch('http://localhost:8000/books')
+    fetch('http://13.233.150.127:8000/books')
       .then(response => response.json())
       .then(data => {
         if (data.status === 'success') {
@@ -89,7 +89,7 @@ const Index = () => {
       formData.append('end', endPage);
       formData.append('book_name', bookName);
 
-      fetch('http://localhost:8000/process-pdf', {
+      fetch('http://13.233.150.127:8000/process-pdf', {
         method: 'POST',
         body: formData
       })
