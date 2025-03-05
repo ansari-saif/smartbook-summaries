@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, X, Upload } from 'lucide-react';
+import { Plus, X, Upload, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -20,6 +20,7 @@ const Index = () => {
   const [bookName, setBookName] = useState('');
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -72,6 +73,8 @@ const Index = () => {
 
   const handleAddBook = () => {
     if (selectedFile && currentBook.chapters.length > 0 && bookName && startPage && endPage) {
+      setIsSubmitting(true);
+
       const newBook: Book = {
         id: Math.random().toString(36).substr(2, 9),
         title: bookName,
@@ -96,17 +99,19 @@ const Index = () => {
       .then(response => response.json())
       .then(data => {
         console.log('Success:', data);
+        setBooks(prev => [...prev, newBook]);
+        setSelectedFile(null);
+        setCurrentBook({ chapters: ['Chapter 1'] });
+        setBookName('');
+        setStartPage('');
+        setEndPage('');
       })
       .catch((error) => {
         console.error('Error:', error);
+      })
+      .finally(() => {
+        setIsSubmitting(false);
       });
-
-      setBooks(prev => [...prev, newBook]);
-      setSelectedFile(null);
-      setCurrentBook({ chapters: ['Chapter 1'] });
-      setBookName('');
-      setStartPage('');
-      setEndPage('');
     }
   };
 
@@ -249,9 +254,16 @@ const Index = () => {
             <Button
               onClick={handleAddBook}
               className="w-full button-gradient"
-              disabled={!selectedFile}
+              disabled={!selectedFile || isSubmitting}
             >
-              Add Book
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing Book...
+                </>
+              ) : (
+                'Add Book'
+              )}
             </Button>
           </Card>
 
