@@ -1,69 +1,34 @@
-# Welcome to your Lovable project
+# Smartbook Summaries
 
-## Project info
+Upload a PDF, name the chapters, and get a plain-English rewrite plus a short summary for each chapter.
 
-**URL**: https://lovable.dev/projects/036545b9-3fd1-4fd0-ba72-4a8f57c29797
+The UI is the React app from [smartbook-summaries](https://github.com/ansari-saif/smartbook-summaries). The API is the FastAPI service that used to live in `ansarisaif-alt/book-backend`.
 
-## How can I edit this code?
+## Run
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/036545b9-3fd1-4fd0-ba72-4a8f57c29797) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+cp backend/.env.example backend/.env   # set OPENAI_KEY before processing a real PDF
+make setup
+make dev
 ```
 
-**Edit a file directly in GitHub**
+| URL | What |
+|-----|------|
+| http://127.0.0.1:5173 | Upload books and read summaries |
+| http://127.0.0.1:8000/docs | API docs |
+| http://127.0.0.1:8000/health | Health check |
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+`make test` runs the API tests and a production frontend build. Chapter processing calls OpenAI only when you upload a PDF; the tests stub that call.
 
-**Use GitHub Codespaces**
+## API
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+| Method | Path | What |
+|--------|------|------|
+| GET | `/books` | Book names and chapter counts |
+| POST | `/process-pdf` | `pdf_file`, `search_strings` (JSON chapter names), `start`, `end`, `book_name` |
+| GET | `/book-details?book_name=` | AI text for each chapter |
+| GET | `/chapter-pdf?book_name=&chapter_name=` | Rewritten chapter PDF |
 
-## What technologies are used for this project?
+`start` and `end` are 1-based page numbers, and `end` is included. Generated files stay in `backend/data/` and are not committed.
 
-This project is built with .
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/036545b9-3fd1-4fd0-ba72-4a8f57c29797) and click on Share -> Publish.
-
-## I want to use a custom domain - is that possible?
-
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+Point the UI at another API with `VITE_API_URL` (see `frontend/.env.example`).
