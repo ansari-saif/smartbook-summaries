@@ -7,6 +7,7 @@ from textwrap import wrap
 
 import fitz
 from dotenv import load_dotenv
+from loguru import logger
 from openai import OpenAI
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -35,6 +36,7 @@ def safe_name(name: str) -> str:
 def _client() -> OpenAI:
     key = os.getenv("OPENROUTER_KEY")
     if not key:
+        logger.error("OPENROUTER_KEY is not set")
         raise RuntimeError("OPENROUTER_KEY is not set")
     return OpenAI(base_url=OPENROUTER_URL, api_key=key)
 
@@ -43,6 +45,7 @@ def create_pdf(book_name, filename, text, max_width=80):
     book_dir = data_dir() / "book_pdfs" / safe_name(book_name)
     book_dir.mkdir(parents=True, exist_ok=True)
     out = book_dir / filename
+    logger.debug("Writing chapter PDF {}", out)
 
     pdf = canvas.Canvas(str(out), pagesize=letter)
     pdf.setTitle(filename)
@@ -67,8 +70,10 @@ def create_pdf(book_name, filename, text, max_width=80):
 
 
 def _chat(system: str, prompt: str) -> str:
+    model = os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL)
+    logger.debug("OpenRouter chat model={} prompt_chars={}", model, len(prompt))
     response = _client().chat.completions.create(
-        model=os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL),
+        model=model,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
@@ -79,6 +84,7 @@ def _chat(system: str, prompt: str) -> str:
     )
     content = response.choices[0].message.content
     if not content:
+        logger.error("OpenRouter returned empty content (model={})", model)
         raise RuntimeError("model returned an empty response")
     return content.strip().strip("```json").strip("```")
 
@@ -92,6 +98,7 @@ def get_ai_response(prompt):
             prompt,
         )
     except Exception as e:
+        logger.exception("Rewrite failed: {}", e)
         return f"Error fetching response: {e}"
 
 
@@ -104,6 +111,7 @@ def get_ai_response_summery(prompt):
         )
         return "\n\nSummary : \n" + summary
     except Exception as e:
+        logger.exception("Summary failed: {}", e)
         return f"Error fetching response: {e}"
 
 
@@ -158,11 +166,20 @@ def extract_text_from_pdf(pdf_content, start, end):
     text = ""
     pdf_reader = fitz.open(stream=BytesIO(pdf_content), filetype="pdf")
     try:
+        page_count = pdf_reader.page_count
         start_i = max(start - 1, 0)
+        logger.debug(
+            "Extracting PDF text pages {}-{} (pdf has {} pages, {} bytes)",
+            start,
+            end,
+            page_count,
+            len(pdf_content),
+        )
         for page in pdf_reader[start_i:end]:
             text += page.get_text("text")
     finally:
         pdf_reader.close()
+    logger.debug("Extracted {} characters of text", len(text))
     return text
 
 
@@ -170,22 +187,41 @@ def create_json(filename, payload):
     path = Path(filename)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=4))
+    logger.debug("Wrote JSON {}", path)
 
 
 def process_init(pdf_content, book_name, strings_to_search, start, end):
     book_name = safe_name(book_name)
+    logger.info(
+        "Processing book={!r} chapters={} pages={}-{}",
+        book_name,
+        strings_to_search,
+        start,
+        end,
+    )
     content = extract_text_from_pdf(pdf_content, start, end)
     chapters = extract_chapters(content, strings_to_search)
     if not chapters:
+        preview = content[:300].replace("\n", " ")
+        logger.warning(
+            "No chapter titles matched for book={!r}. Looking for {}. Text preview: {!r}",
+            book_name,
+            strings_to_search,
+            preview,
+        )
         raise ValueError("No chapters matched the given names in that page range")
+    logger.info("Matched {} chapters for book={!r}: {}", len(chapters), book_name, list(chapters))
     create_json(data_dir() / f"{book_name}.json", chapters)
     ai_response = {}
     for key, value in chapters.items():
+        logger.info("Rewriting chapter={!r} ({} chars)", key, len(value))
         paragraphs = extract_paragraphs(value)
         chunks = merge_paragraphs(paragraphs)
+        logger.debug("Chapter={!r} split into {} chunks", key, len(chunks))
         results = [get_ai_response(para) for para in chunks]
         updated_content = key + "\n\n" + "\n\n".join(results)
         updated_content += get_ai_response_summery(updated_content)
         create_pdf(book_name, key + ".pdf", updated_content)
         ai_response[key] = updated_content
     create_json(data_dir() / "ai" / f"{book_name}.json", ai_response)
+    logger.success("Finished book={!r}", book_name)

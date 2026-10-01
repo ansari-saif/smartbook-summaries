@@ -35,3 +35,4 @@ make test    # pytest + frontend vitest + production build
 - Chapter matching is exact string match against the extracted PDF text.
 - AI calls happen only during PDF processing; tests stub those helpers.
 - The upload zone supports click and drag-and-drop for PDF files.
+- Backend uses Loguru: stderr for live output, rotating files under `backend/logs/`.
