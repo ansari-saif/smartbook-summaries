@@ -133,12 +133,30 @@ const Summary = () => {
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [scrollPercent, setScrollPercent] = useState(0);
+  const [scrollIndicatorVisible, setScrollIndicatorVisible] = useState(false);
   const readerRef = useRef<HTMLDivElement>(null);
   const readerShellRef = useRef<HTMLDivElement>(null);
+  const scrollHideTimerRef = useRef<number | null>(null);
   const isFullscreen = nativeFullscreen || expanded;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const bookName = searchParams.get('book');
+
+  const clearScrollHideTimer = () => {
+    if (scrollHideTimerRef.current !== null) {
+      window.clearTimeout(scrollHideTimerRef.current);
+      scrollHideTimerRef.current = null;
+    }
+  };
+
+  const showScrollIndicatorBriefly = () => {
+    setScrollIndicatorVisible(true);
+    clearScrollHideTimer();
+    scrollHideTimerRef.current = window.setTimeout(() => {
+      setScrollIndicatorVisible(false);
+      scrollHideTimerRef.current = null;
+    }, 3000);
+  };
 
   const updateScrollPercent = (el: HTMLDivElement) => {
     const max = el.scrollHeight - el.clientHeight;
@@ -151,6 +169,7 @@ const Summary = () => {
 
   const handleReaderScroll = (event: React.UIEvent<HTMLDivElement>) => {
     updateScrollPercent(event.currentTarget);
+    showScrollIndicatorBriefly();
   };
   useEffect(() => {
     if (!bookName) {
@@ -203,7 +222,11 @@ const Summary = () => {
     if (!el) return;
     el.scrollTop = 0;
     updateScrollPercent(el);
+    setScrollIndicatorVisible(false);
+    clearScrollHideTimer();
   }, [currentChapter, bookDetails, isFullscreen]);
+
+  useEffect(() => () => clearScrollHideTimer(), []);
 
   const toggleFullscreen = async () => {
     if (expanded || document.fullscreenElement) {
@@ -258,7 +281,9 @@ const Summary = () => {
       }`}
     >
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 z-20 h-1 bg-white/10"
+        className={`pointer-events-none absolute inset-x-0 top-0 z-20 h-1 bg-white/10 transition-opacity duration-300 ${
+          scrollIndicatorVisible ? 'opacity-100' : 'opacity-0'
+        }`}
         aria-hidden
       >
         <div
@@ -268,7 +293,9 @@ const Summary = () => {
       </div>
 
       <div
-        className="pointer-events-none absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-2"
+        className={`pointer-events-none absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-2 transition-opacity duration-300 ${
+          scrollIndicatorVisible ? 'opacity-100' : 'opacity-0'
+        }`}
         aria-live="polite"
         aria-label={`Reading progress ${scrollPercent} percent`}
       >
