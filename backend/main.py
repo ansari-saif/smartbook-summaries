@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 
@@ -72,7 +73,10 @@ async def process_pdf(
             len(pdf_content),
             strings_to_search,
         )
-        process_init(pdf_content, book_name, strings_to_search, start, end)
+        # Offload blocking PDF/AI work so other requests (e.g. GET /books) stay responsive.
+        await asyncio.to_thread(
+            process_init, pdf_content, book_name, strings_to_search, start, end
+        )
         logger.success("Processed book={!r} ({} chapters)", book_name, len(strings_to_search))
         return {"status": "success"}
     except HTTPException:

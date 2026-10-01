@@ -8,6 +8,7 @@ All notable changes to this project are documented here.
 
 - PDF upload drop zone now accepts drag-and-drop (previously only click-to-upload worked).
 - PDF detection also accepts `.pdf` files with an empty MIME type (common on some OS drop events).
+- `POST /process-pdf` no longer blocks the event loop; other routes like `GET /books` stay available while a book is processing.
 
 ### Added
 
