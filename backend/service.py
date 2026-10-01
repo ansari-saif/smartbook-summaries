@@ -17,6 +17,15 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "z-ai/glm-4.7-flash"
+# Rough English estimate; used to keep prompts under a safe input budget.
+CHARS_PER_TOKEN = 4
+# Leave headroom under typical context windows for system prompt + completion.
+MAX_SUMMARY_INPUT_TOKENS = 6000
+MAX_OUTPUT_TOKENS = 2048
+SUMMARY_SYSTEM = (
+    "Summarize the following text in simple and easy-to-understand language. "
+    "Avoid complex words and keep it brief."
+)
 
 
 def data_dir() -> Path:
@@ -70,9 +79,51 @@ def create_pdf(book_name, filename, text, max_width=80):
     pdf.save()
 
 
-def _chat(system: str, prompt: str) -> str:
+def estimate_tokens(text: str) -> int:
+    return max(1, (len(text) + CHARS_PER_TOKEN - 1) // CHARS_PER_TOKEN)
+
+
+def split_for_token_limit(text: str, max_tokens: int = MAX_SUMMARY_INPUT_TOKENS) -> list[str]:
+    """Split text into pieces that fit under an approximate token budget."""
+    max_chars = max(CHARS_PER_TOKEN, max_tokens * CHARS_PER_TOKEN)
+    stripped = text.strip()
+    if not stripped:
+        return []
+    if len(stripped) <= max_chars:
+        return [stripped]
+
+    parts: list[str] = []
+    paragraphs = [p for p in stripped.split("\n\n") if p.strip()]
+    current = ""
+    for paragraph in paragraphs or [stripped]:
+        candidate = f"{current}\n\n{paragraph}".strip() if current else paragraph
+        if len(candidate) <= max_chars:
+            current = candidate
+            continue
+        if current:
+            parts.append(current)
+            current = ""
+        if len(paragraph) <= max_chars:
+            current = paragraph
+            continue
+        for start in range(0, len(paragraph), max_chars):
+            chunk = paragraph[start : start + max_chars].strip()
+            if chunk:
+                parts.append(chunk)
+    if current:
+        parts.append(current)
+    return parts
+
+
+def _chat(system: str, prompt: str, max_tokens: int = MAX_OUTPUT_TOKENS) -> str:
     model = os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL)
-    logger.debug("OpenRouter chat model={} prompt_chars={}", model, len(prompt))
+    logger.debug(
+        "OpenRouter chat model={} prompt_chars={} ~{} tokens max_out={}",
+        model,
+        len(prompt),
+        estimate_tokens(prompt),
+        max_tokens,
+    )
     response = _client().chat.completions.create(
         model=model,
         messages=[
@@ -80,7 +131,7 @@ def _chat(system: str, prompt: str) -> str:
             {"role": "user", "content": prompt},
         ],
         temperature=0,
-        max_tokens=2048,
+        max_tokens=max_tokens,
         extra_body={"reasoning": {"enabled": False}},
     )
     content = response.choices[0].message.content
@@ -103,13 +154,48 @@ def get_ai_response(prompt):
         return f"Error fetching response: {e}"
 
 
+def _summarize_long_text(text: str) -> str:
+    """Summarize text, map-reducing when input would exceed the token budget."""
+    parts = split_for_token_limit(text, MAX_SUMMARY_INPUT_TOKENS)
+    if not parts:
+        return ""
+    total_tokens = estimate_tokens(text)
+    if len(parts) == 1:
+        logger.info("Summary single pass (~{} tokens)", total_tokens)
+        return _chat(SUMMARY_SYSTEM, parts[0], max_tokens=1024)
+
+    logger.info(
+        "Summary input ~{} tokens exceeds budget {} — map-reduce over {} chunks",
+        total_tokens,
+        MAX_SUMMARY_INPUT_TOKENS,
+        len(parts),
+    )
+    partials = []
+    for index, part in enumerate(parts, start=1):
+        logger.info(
+            "Summary map {}/{} (~{} tokens)",
+            index,
+            len(parts),
+            estimate_tokens(part),
+        )
+        partials.append(_chat(SUMMARY_SYSTEM, part, max_tokens=1024))
+
+    combined = "\n\n".join(partials)
+    if estimate_tokens(combined) > MAX_SUMMARY_INPUT_TOKENS:
+        logger.info("Partial summaries still large (~{} tokens) — reducing again", estimate_tokens(combined))
+        return _summarize_long_text(combined)
+
+    logger.info("Summary reduce pass (~{} tokens)", estimate_tokens(combined))
+    return _chat(
+        SUMMARY_SYSTEM,
+        "Combine these section summaries into one short overall summary:\n\n" + combined,
+        max_tokens=1024,
+    )
+
+
 def get_ai_response_summery(prompt):
     try:
-        summary = _chat(
-            "Summarize the following text in simple and easy-to-understand language. "
-            "Avoid complex words and keep it brief.",
-            prompt,
-        )
+        summary = _summarize_long_text(prompt)
         return "\n\nSummary : \n" + summary
     except Exception as e:
         logger.exception("Summary failed: {}", e)
