@@ -132,12 +132,26 @@ const Summary = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [scrollPercent, setScrollPercent] = useState(0);
   const readerRef = useRef<HTMLDivElement>(null);
+  const readerShellRef = useRef<HTMLDivElement>(null);
   const isFullscreen = nativeFullscreen || expanded;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const bookName = searchParams.get('book');
 
+  const updateScrollPercent = (el: HTMLDivElement) => {
+    const max = el.scrollHeight - el.clientHeight;
+    if (max <= 0) {
+      setScrollPercent(100);
+      return;
+    }
+    setScrollPercent(Math.min(100, Math.max(0, Math.round((el.scrollTop / max) * 100))));
+  };
+
+  const handleReaderScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    updateScrollPercent(event.currentTarget);
+  };
   useEffect(() => {
     if (!bookName) {
       navigate('/');
@@ -166,7 +180,7 @@ const Summary = () => {
 
   useEffect(() => {
     const onChange = () => {
-      setNativeFullscreen(document.fullscreenElement === readerRef.current);
+      setNativeFullscreen(document.fullscreenElement === readerShellRef.current);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setExpanded(false);
@@ -180,9 +194,16 @@ const Summary = () => {
   }, []);
 
   useEffect(() => {
-    if (!expanded || !readerRef.current || document.fullscreenElement === readerRef.current) return;
-    readerRef.current.requestFullscreen().catch(() => {});
+    if (!expanded || !readerShellRef.current || document.fullscreenElement === readerShellRef.current) return;
+    readerShellRef.current.requestFullscreen().catch(() => {});
   }, [expanded]);
+
+  useEffect(() => {
+    const el = readerRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
+    updateScrollPercent(el);
+  }, [currentChapter, bookDetails, isFullscreen]);
 
   const toggleFullscreen = async () => {
     if (expanded || document.fullscreenElement) {
@@ -231,28 +252,62 @@ const Summary = () => {
   const chapters = Object.keys(bookDetails.data);
   const reader = (
     <div
-      ref={readerRef}
-      className={`overflow-y-auto bg-background ${
-        isFullscreen
-          ? 'fixed inset-0 z-50 h-screen max-h-none p-8 md:p-12'
-          : 'max-h-[70vh] rounded-lg border border-white/10 bg-background-light p-6'
+      ref={readerShellRef}
+      className={`relative ${
+        isFullscreen ? 'fixed inset-0 z-50 h-screen bg-background' : 'max-h-[70vh]'
       }`}
     >
-      {isFullscreen && (
-        <div className="mb-8 flex items-center justify-between gap-4">
-          <h2 className="text-2xl font-semibold text-primary-contrast">
-            {chapters[currentChapter]}
-          </h2>
-          <Button variant="outline" onClick={toggleFullscreen}>
-            <Minimize2 className="mr-2 h-4 w-4" />
-            Exit full screen
-          </Button>
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-20 h-1 bg-white/10"
+        aria-hidden
+      >
+        <div
+          className="h-full bg-primary transition-[width] duration-75 ease-out"
+          style={{ width: `${scrollPercent}%` }}
+        />
+      </div>
+
+      <div
+        className="pointer-events-none absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-2"
+        aria-live="polite"
+        aria-label={`Reading progress ${scrollPercent} percent`}
+      >
+        <div className="relative h-28 w-1.5 overflow-hidden rounded-full bg-white/15">
+          <div
+            className="absolute inset-x-0 top-0 rounded-full bg-primary transition-[height] duration-75 ease-out"
+            style={{ height: `${scrollPercent}%` }}
+          />
         </div>
-      )}
-      <FormattedChapter
-        title={chapters[currentChapter]}
-        text={bookDetails.data[chapters[currentChapter]]}
-      />
+        <span className="rounded-md bg-background/90 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-primary-contrast shadow-sm ring-1 ring-white/10">
+          {scrollPercent}%
+        </span>
+      </div>
+
+      <div
+        ref={readerRef}
+        onScroll={handleReaderScroll}
+        className={`h-full overflow-y-auto bg-background ${
+          isFullscreen
+            ? 'max-h-none p-8 md:p-12'
+            : 'max-h-[70vh] rounded-lg border border-white/10 bg-background-light p-6'
+        }`}
+      >
+        {isFullscreen && (
+          <div className="mb-8 flex items-center justify-between gap-4">
+            <h2 className="text-2xl font-semibold text-primary-contrast">
+              {chapters[currentChapter]}
+            </h2>
+            <Button variant="outline" onClick={toggleFullscreen}>
+              <Minimize2 className="mr-2 h-4 w-4" />
+              Exit full screen
+            </Button>
+          </div>
+        )}
+        <FormattedChapter
+          title={chapters[currentChapter]}
+          text={bookDetails.data[chapters[currentChapter]]}
+        />
+      </div>
     </div>
   );
 
