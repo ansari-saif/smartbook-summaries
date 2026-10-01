@@ -29,14 +29,32 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
   const blocks: React.ReactNode[] = [];
   let paragraph: string[] = [];
   let list: string[] = [];
+  let orderedList: string[] = [];
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
-    blocks.push(
-      <p key={`p-${blocks.length}`} className="text-gray-300 leading-7">
-        {renderInline(paragraph.join(' '))}
-      </p>
-    );
+    // Keep inline "1. ... 2. ..." runs as separate lines when the model
+    // forgot newlines between numbered points.
+    const joined = paragraph.join(' ');
+    const inlineNumbered = joined.split(/(?=\b\d+\.\s+)/).map((part) => part.trim()).filter(Boolean);
+    const looksNumbered =
+      inlineNumbered.length > 1 && inlineNumbered.every((part) => /^\d+\.\s+/.test(part));
+
+    if (looksNumbered) {
+      blocks.push(
+        <ol key={`ol-${blocks.length}`} className="list-decimal space-y-2 pl-5 text-gray-300 leading-7">
+          {inlineNumbered.map((item, index) => (
+            <li key={index}>{renderInline(item.replace(/^\d+\.\s+/, ''))}</li>
+          ))}
+        </ol>
+      );
+    } else {
+      blocks.push(
+        <p key={`p-${blocks.length}`} className="text-gray-300 leading-7">
+          {renderInline(joined)}
+        </p>
+      );
+    }
     paragraph = [];
   };
 
@@ -52,19 +70,35 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
     list = [];
   };
 
+  const flushOrderedList = () => {
+    if (orderedList.length === 0) return;
+    blocks.push(
+      <ol key={`ol-${blocks.length}`} className="list-decimal space-y-2 pl-5 text-gray-300 leading-7">
+        {orderedList.map((item, index) => (
+          <li key={index}>{renderInline(item)}</li>
+        ))}
+      </ol>
+    );
+    orderedList = [];
+  };
+
+  const flushAll = () => {
+    flushParagraph();
+    flushList();
+    flushOrderedList();
+  };
+
   text.split('\n').forEach((raw) => {
     const line = raw.trim();
     if (!line || line === '---') {
-      flushParagraph();
-      flushList();
+      flushAll();
       return;
     }
     if (/^here is the text rewritten/i.test(line)) return;
     if (/^-\s+".+"\s+→/.test(line)) return;
     if (line.toLowerCase() === title.toLowerCase()) return;
     if (/^summary\s*:/i.test(line)) {
-      flushParagraph();
-      flushList();
+      flushAll();
       blocks.push(
         <h3 key={`h-${blocks.length}`} className="pt-4 text-lg font-semibold text-primary-contrast">
           Summary
@@ -74,8 +108,7 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
     }
     const heading = line.match(/^#{1,3}\s+(.+)$/);
     if (heading) {
-      flushParagraph();
-      flushList();
+      flushAll();
       blocks.push(
         <h3 key={`h-${blocks.length}`} className="pt-2 text-lg font-semibold text-primary-contrast">
           {heading[1]}
@@ -84,8 +117,7 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
       return;
     }
     if (/^\*\*[^*]+\*\*$/.test(line)) {
-      flushParagraph();
-      flushList();
+      flushAll();
       blocks.push(
         <h3 key={`h-${blocks.length}`} className="pt-2 text-lg font-semibold text-primary-contrast">
           {line.slice(2, -2)}
@@ -93,18 +125,26 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
       );
       return;
     }
+    const numbered = line.match(/^\d+\.\s+(.+)$/);
+    if (numbered) {
+      flushParagraph();
+      flushList();
+      orderedList.push(numbered[1]);
+      return;
+    }
     const bullet = line.match(/^[*-]\s+(.+)$/);
     if (bullet) {
       flushParagraph();
+      flushOrderedList();
       list.push(bullet[1]);
       return;
     }
     flushList();
+    flushOrderedList();
     paragraph.push(line);
   });
 
-  flushParagraph();
-  flushList();
+  flushAll();
 
   return <div className="space-y-4">{blocks}</div>;
 }
@@ -125,22 +165,79 @@ const LoadingScreen = () => (
   </div>
 );
 
+function scrollStorageKey(book: string, chapter: string) {
+  return `smartbook-scroll:${book}::${chapter}`;
+}
+
+function detailsStorageKey(book: string) {
+  return `smartbook-details:${book}`;
+}
+
+function fullscreenStorageKey(book: string) {
+  return `smartbook-fs:${book}`;
+}
+
+function chapterStorageKey(book: string) {
+  return `smartbook-chapter:${book}`;
+}
+
+function loadCachedDetails(book: string | null): BookDetails | null {
+  if (!book) return null;
+  try {
+    const raw = sessionStorage.getItem(detailsStorageKey(book));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as BookDetails;
+    if (parsed?.book_name && parsed?.data && typeof parsed.data === 'object') {
+      return parsed;
+    }
+  } catch {
+    // ignore bad cache
+  }
+  return null;
+}
+
+function readStoredChapter(book: string | null, chapterCount = Infinity) {
+  if (!book) return 0;
+  const n = Number(sessionStorage.getItem(chapterStorageKey(book)) ?? '0');
+  if (!Number.isFinite(n) || n < 0) return 0;
+  if (Number.isFinite(chapterCount) && n >= chapterCount) return 0;
+  return n;
+}
+
 const Summary = () => {
-  const [currentChapter, setCurrentChapter] = useState(0);
-  const [bookDetails, setBookDetails] = useState<BookDetails | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const bookName = searchParams.get('book');
+
+  const cachedDetails = loadCachedDetails(bookName);
+  const [bookDetails, setBookDetails] = useState<BookDetails | null>(cachedDetails);
+  const [isLoading, setIsLoading] = useState(!cachedDetails);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [nativeFullscreen, setNativeFullscreen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(
+    () => !!bookName && sessionStorage.getItem(fullscreenStorageKey(bookName)) === '1'
+  );
+  const [currentChapter, setCurrentChapter] = useState(() => readStoredChapter(bookName));
   const [scrollPercent, setScrollPercent] = useState(0);
   const [scrollIndicatorVisible, setScrollIndicatorVisible] = useState(false);
   const readerRef = useRef<HTMLDivElement>(null);
   const readerShellRef = useRef<HTMLDivElement>(null);
   const scrollHideTimerRef = useRef<number | null>(null);
-  const isFullscreen = nativeFullscreen || expanded;
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const bookName = searchParams.get('book');
+  const prevChapterRef = useRef(currentChapter);
+  const bookDetailsRef = useRef(bookDetails);
+  const currentChapterRef = useRef(currentChapter);
+  const isFullscreenRef = useRef(isFullscreen);
+  bookDetailsRef.current = bookDetails;
+  currentChapterRef.current = currentChapter;
+  isFullscreenRef.current = isFullscreen;
+
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(
+    () => (typeof document !== 'undefined' && isFullscreen ? document.body : null)
+  );
+
+  const setInlineSlot = (node: HTMLDivElement | null) => {
+    if (isFullscreenRef.current) return;
+    setPortalTarget(node);
+  };
 
   const clearScrollHideTimer = () => {
     if (scrollHideTimerRef.current !== null) {
@@ -167,94 +264,178 @@ const Summary = () => {
     setScrollPercent(Math.min(100, Math.max(0, Math.round((el.scrollTop / max) * 100))));
   };
 
+  const saveReaderScroll = (el?: HTMLDivElement | null) => {
+    const node = el ?? readerRef.current;
+    const details = bookDetailsRef.current;
+    if (!node || !details) return;
+    const chapter = Object.keys(details.data)[currentChapterRef.current];
+    if (!chapter) return;
+    sessionStorage.setItem(
+      scrollStorageKey(details.book_name, chapter),
+      String(Math.round(node.scrollTop))
+    );
+  };
+
+  const restoreReaderScroll = () => {
+    const details = bookDetailsRef.current;
+    const el = readerRef.current;
+    if (!el || !details) return;
+    const chapter = Object.keys(details.data)[currentChapterRef.current];
+    if (!chapter) return;
+    const raw = sessionStorage.getItem(scrollStorageKey(details.book_name, chapter));
+    const top = raw == null ? 0 : Number(raw);
+    const apply = () => {
+      if (!readerRef.current) return;
+      readerRef.current.scrollTop = Number.isFinite(top) ? top : 0;
+      updateScrollPercent(readerRef.current);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(apply));
+  };
+
   const handleReaderScroll = (event: React.UIEvent<HTMLDivElement>) => {
     updateScrollPercent(event.currentTarget);
+    saveReaderScroll(event.currentTarget);
     showScrollIndicatorBriefly();
   };
+
+  const handleChapterSelect = (index: number) => {
+    saveReaderScroll();
+    setCurrentChapter(index);
+  };
+
+  const toggleFullscreen = () => {
+    saveReaderScroll();
+    setIsFullscreen((value) => {
+      const next = !value;
+      if (bookName) {
+        sessionStorage.setItem(fullscreenStorageKey(bookName), next ? '1' : '0');
+      }
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (!bookName) {
       navigate('/');
       return;
     }
 
-    setIsLoading(true);
+    let cancelled = false;
+    const hasCache = !!loadCachedDetails(bookName);
+    if (!hasCache) setIsLoading(true);
+
     fetch(api(`/book-details?book_name=${encodeURIComponent(bookName)}`))
-      .then(response => response.json())
-      .then(data => {
+      .then((response) => response.json())
+      .then((data) => {
+        if (cancelled) return;
         if (data.status === 'success') {
-          setBookDetails({
-            book_name: data.book_name,
-            data: data.data
-          });
+          const next = {
+            book_name: data.book_name as string,
+            data: data.data as Record<string, string>,
+          };
+          setBookDetails(next);
+          sessionStorage.setItem(detailsStorageKey(bookName), JSON.stringify(next));
+          const maxChapter = Object.keys(next.data).length;
+          setCurrentChapter((prev) => (prev >= maxChapter ? 0 : prev));
+        } else if (!hasCache) {
+          navigate('/');
         }
       })
-      .catch(error => {
+      .catch((error) => {
         console.error('Error fetching book details:', error);
-        navigate('/');
+        if (!cancelled && !hasCache) navigate('/');
       })
       .finally(() => {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [bookName, navigate]);
 
   useEffect(() => {
-    const onChange = () => {
-      setNativeFullscreen(document.fullscreenElement === readerShellRef.current);
-    };
+    if (!bookName) return;
+    sessionStorage.setItem(fullscreenStorageKey(bookName), isFullscreen ? '1' : '0');
+  }, [bookName, isFullscreen]);
+
+  useEffect(() => {
+    if (!bookName) return;
+    sessionStorage.setItem(chapterStorageKey(bookName), String(currentChapter));
+  }, [bookName, currentChapter]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setExpanded(false);
+      if (event.key !== 'Escape' || !isFullscreen) return;
+      saveReaderScroll();
+      setIsFullscreen(false);
+      if (bookName) sessionStorage.setItem(fullscreenStorageKey(bookName), '0');
     };
-    document.addEventListener('fullscreenchange', onChange);
     window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [bookName, isFullscreen]);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
-      document.removeEventListener('fullscreenchange', onChange);
-      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previous;
     };
-  }, []);
+  }, [isFullscreen]);
+
+  // Keep one portal host: inline slot normally, document.body in fullscreen.
+  useEffect(() => {
+    if (isFullscreen) {
+      setPortalTarget(document.body);
+    }
+  }, [isFullscreen]);
 
   useEffect(() => {
-    if (!expanded || !readerShellRef.current || document.fullscreenElement === readerShellRef.current) return;
-    readerShellRef.current.requestFullscreen().catch(() => {});
-  }, [expanded]);
+    if (!bookDetails) return;
+    if (prevChapterRef.current !== currentChapter) {
+      prevChapterRef.current = currentChapter;
+      setScrollIndicatorVisible(false);
+      clearScrollHideTimer();
+    }
+    restoreReaderScroll();
+  }, [currentChapter, bookDetails, isFullscreen, portalTarget]);
 
   useEffect(() => {
-    const el = readerRef.current;
-    if (!el) return;
-    el.scrollTop = 0;
-    updateScrollPercent(el);
-    setScrollIndicatorVisible(false);
-    clearScrollHideTimer();
-  }, [currentChapter, bookDetails, isFullscreen]);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        saveReaderScroll();
+        return;
+      }
+      if (bookName) {
+        setIsFullscreen(sessionStorage.getItem(fullscreenStorageKey(bookName)) === '1');
+      }
+      restoreReaderScroll();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [bookName]);
 
   useEffect(() => () => clearScrollHideTimer(), []);
 
-  const toggleFullscreen = async () => {
-    if (expanded || document.fullscreenElement) {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen().catch(() => {});
-      }
-      setExpanded(false);
-      return;
-    }
-    setExpanded(true);
-  };
-
   const handleDownloadPDF = async () => {
+    if (!bookDetails) return;
+    const chapters = Object.keys(bookDetails.data);
     const currentChapterName = chapters[currentChapter];
     setIsDownloading(true);
     try {
       const response = await fetch(
-        api(`/chapter-pdf?book_name=${encodeURIComponent(bookDetails!.book_name)}&chapter_name=${encodeURIComponent(currentChapterName)}`),
+        api(`/chapter-pdf?book_name=${encodeURIComponent(bookDetails.book_name)}&chapter_name=${encodeURIComponent(currentChapterName)}`),
         { method: 'GET' }
       );
-      
+
       if (!response.ok) throw new Error('PDF download failed');
-      
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${bookDetails!.book_name}-${currentChapterName}.pdf`;
+      a.download = `${bookDetails.book_name}-${currentChapterName}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -266,7 +447,7 @@ const Summary = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !bookDetails) {
     return <LoadingScreen />;
   }
 
@@ -276,9 +457,11 @@ const Summary = () => {
   const reader = (
     <div
       ref={readerShellRef}
-      className={`relative ${
-        isFullscreen ? 'fixed inset-0 z-50 h-screen bg-background' : 'max-h-[70vh]'
-      }`}
+      className={
+        isFullscreen
+          ? 'fixed inset-0 z-[100] flex h-screen flex-col bg-background'
+          : 'relative max-h-[70vh]'
+      }
     >
       <div
         className={`pointer-events-none absolute inset-x-0 top-0 z-20 h-1 bg-white/10 transition-opacity duration-300 ${
@@ -403,7 +586,7 @@ const Summary = () => {
                   {chapters.map((chapter, index) => (
                     <motion.button
                       key={index}
-                      onClick={() => setCurrentChapter(index)}
+                      onClick={() => handleChapterSelect(index)}
                       className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${
                         currentChapter === index
                           ? 'bg-primary text-white'
@@ -418,20 +601,16 @@ const Summary = () => {
                 </nav>
               </motion.div>
 
-              <motion.div
-                className="col-span-9"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                {!isFullscreen && reader}
-              </motion.div>
+              <div
+                ref={setInlineSlot}
+                className={`col-span-9 ${isFullscreen ? 'min-h-[70vh]' : ''}`}
+              />
             </div>
           </Card>
         </motion.div>
       </div>
     </div>
-    {isFullscreen && createPortal(reader, document.body)}
+    {portalTarget && createPortal(reader, portalTarget)}
     </>
   );
 };
