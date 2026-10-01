@@ -75,3 +75,39 @@ def test_rejects_path_traversal(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     response = client.get("/book-details", params={"book_name": "../secret"})
     assert response.status_code == 400
+
+
+def test_process_pdf_merges_chapters_for_same_book(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(service, "get_ai_response", lambda prompt: f"rewrite:{prompt[:24]}")
+    monkeypatch.setattr(service, "get_ai_response_summery", lambda prompt: "\n\nSummary : \nshort")
+
+    first = client.post(
+        "/process-pdf",
+        data={
+            "search_strings": '["Chapter 1"]',
+            "start": "1",
+            "end": "1",
+            "book_name": "Demo Book",
+        },
+        files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
+    )
+    assert first.status_code == 200, first.text
+
+    second = client.post(
+        "/process-pdf",
+        data={
+            "search_strings": '["Chapter 2"]',
+            "start": "1",
+            "end": "1",
+            "book_name": "Demo Book",
+        },
+        files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
+    )
+    assert second.status_code == 200, second.text
+
+    books = client.get("/books").json()["books"]
+    assert books == [{"book_name": "Demo Book", "chapter_count": 2}]
+
+    details = client.get("/book-details", params={"book_name": "Demo Book"}).json()["data"]
+    assert set(details) == {"Chapter 1", "Chapter 2"}

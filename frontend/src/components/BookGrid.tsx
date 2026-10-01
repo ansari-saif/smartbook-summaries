@@ -52,7 +52,7 @@ export const BookGrid = ({ books, onBookSelect, onBookRemove }: BookGridProps) =
             </p>
             <Button
               className="w-full button-gradient"
-              onClick={() => onBookSelect(book.title)}
+              onClick={() => onBookSelect(book.bookName)}
             >
               Read Now ...
             </Button>

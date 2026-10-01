@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 from io import BytesIO
 from pathlib import Path
 from textwrap import wrap
@@ -190,6 +191,17 @@ def create_json(filename, payload):
     logger.debug("Wrote JSON {}", path)
 
 
+def _load_json_dict(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    try:
+        parsed = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning("Could not read existing {}: {}", path, e)
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def process_init(pdf_content, book_name, strings_to_search, start, end):
     book_name = safe_name(book_name)
     logger.info(
@@ -211,17 +223,67 @@ def process_init(pdf_content, book_name, strings_to_search, start, end):
         )
         raise ValueError("No chapters matched the given names in that page range")
     logger.info("Matched {} chapters for book={!r}: {}", len(chapters), book_name, list(chapters))
-    create_json(data_dir() / f"{book_name}.json", chapters)
-    ai_response = {}
+
+    raw_path = data_dir() / f"{book_name}.json"
+    ai_path = data_dir() / "ai" / f"{book_name}.json"
+    existing_raw = _load_json_dict(raw_path)
+    existing_ai = _load_json_dict(ai_path)
+    if existing_raw or existing_ai:
+        logger.info(
+            "Merging into existing book={!r} (kept chapters: raw={}, ai={})",
+            book_name,
+            list(existing_raw),
+            list(existing_ai),
+        )
+
+    merged_raw = {**existing_raw, **chapters}
+    create_json(raw_path, merged_raw)
+
+    ai_response = dict(existing_ai)
     for key, value in chapters.items():
         logger.info("Rewriting chapter={!r} ({} chars)", key, len(value))
         paragraphs = extract_paragraphs(value)
         chunks = merge_paragraphs(paragraphs)
-        logger.debug("Chapter={!r} split into {} chunks", key, len(chunks))
-        results = [get_ai_response(para) for para in chunks]
+        total_chunks = len(chunks)
+        logger.info("Chapter={!r} split into {} chunks", key, total_chunks)
+        results = []
+        for index, para in enumerate(chunks, start=1):
+            logger.info(
+                "Chapter={!r} chunk {}/{} ({} chars) — rewrite starting",
+                key,
+                index,
+                total_chunks,
+                len(para),
+            )
+            started = time.perf_counter()
+            rewritten = get_ai_response(para)
+            elapsed = time.perf_counter() - started
+            ok = not rewritten.startswith("Error fetching response:")
+            logger.info(
+                "Chapter={!r} chunk {}/{} done in {:.1f}s (out={} chars, ok={})",
+                key,
+                index,
+                total_chunks,
+                elapsed,
+                len(rewritten),
+                ok,
+            )
+            results.append(rewritten)
         updated_content = key + "\n\n" + "\n\n".join(results)
+        logger.info("Chapter={!r} summary starting", key)
+        summary_started = time.perf_counter()
         updated_content += get_ai_response_summery(updated_content)
+        logger.info(
+            "Chapter={!r} summary done in {:.1f}s",
+            key,
+            time.perf_counter() - summary_started,
+        )
         create_pdf(book_name, key + ".pdf", updated_content)
         ai_response[key] = updated_content
-    create_json(data_dir() / "ai" / f"{book_name}.json", ai_response)
-    logger.success("Finished book={!r}", book_name)
+        logger.success("Chapter={!r} complete", key)
+    create_json(ai_path, ai_response)
+    logger.success(
+        "Finished book={!r} ({} chapters total)",
+        book_name,
+        len(ai_response),
+    )

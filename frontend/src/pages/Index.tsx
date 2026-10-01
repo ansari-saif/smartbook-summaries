@@ -25,26 +25,33 @@ const Index = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [formError, setFormError] = useState('');
   const navigate = useNavigate();
 
-  useEffect(() => {
+  const loadBooks = () =>
     fetch(api('/books'))
-      .then(response => response.json())
-      .then(data => {
-        if (data.status === 'success') {
-          const apiBooks = data.books.map((apiBook: APIBook) => ({
-            id: Math.random().toString(36).substr(2, 9),
-            title: apiBook.book_name,
-            bookName: apiBook.book_name,
-            chapters: Array(apiBook.chapter_count).fill('').map((_, i) => `Chapter ${i + 1}`),
-            chapter_count: apiBook.chapter_count
-          }));
-          setBooks(apiBooks);
-        }
+      .then((response) => {
+        if (!response.ok) throw new Error(`Failed to load books (${response.status})`);
+        return response.json();
       })
-      .catch(error => {
-        console.error('Error fetching books:', error);
+      .then((data) => {
+        if (data.status !== 'success' || !Array.isArray(data.books)) return;
+        const apiBooks = data.books.map((apiBook: APIBook) => ({
+          id: apiBook.book_name,
+          title: apiBook.book_name,
+          bookName: apiBook.book_name,
+          chapters: Array(apiBook.chapter_count)
+            .fill('')
+            .map((_, i) => `Chapter ${i + 1}`),
+          chapter_count: apiBook.chapter_count,
+        }));
+        setBooks(apiBooks);
       });
+
+  useEffect(() => {
+    loadBooks().catch((error) => {
+      console.error('Error fetching books:', error);
+    });
   }, []);
 
   const acceptPdf = (file: File | undefined | null) => {
@@ -100,47 +107,45 @@ const Index = () => {
     }));
   };
 
-  const handleAddBook = () => {
-    if (selectedFile && currentBook.chapters.length > 0 && bookName && startPage && endPage) {
-      setIsSubmitting(true);
+  const handleAddBook = async () => {
+    if (!(selectedFile && currentBook.chapters.length > 0 && bookName && startPage && endPage)) {
+      return;
+    }
 
-      const newBook: Book = {
-        id: Math.random().toString(36).substr(2, 9),
-        title: bookName,
-        chapters: currentBook.chapters,
-        file: selectedFile,
-        bookName: bookName,
-        startPage: parseInt(startPage),
-        endPage: parseInt(endPage)
-      };
+    setIsSubmitting(true);
+    setFormError('');
 
-      const formData = new FormData();
-      formData.append('pdf_file', selectedFile);
-      formData.append('search_strings', JSON.stringify(currentBook.chapters));
-      formData.append('start', startPage);
-      formData.append('end', endPage);
-      formData.append('book_name', bookName);
+    const formData = new FormData();
+    formData.append('pdf_file', selectedFile);
+    formData.append('search_strings', JSON.stringify(currentBook.chapters));
+    formData.append('start', startPage);
+    formData.append('end', endPage);
+    formData.append('book_name', bookName);
 
-      fetch(api('/process-pdf'), {
+    try {
+      const response = await fetch(api('/process-pdf'), {
         method: 'POST',
-        body: formData
-      })
-      .then(response => response.json())
-      .then(data => {
-        console.log('Success:', data);
-        setBooks(prev => [...prev, newBook]);
-        setSelectedFile(null);
-        setCurrentBook({ chapters: ['Chapter 1'] });
-        setBookName('');
-        setStartPage('');
-        setEndPage('');
-      })
-      .catch((error) => {
-        console.error('Error:', error);
-      })
-      .finally(() => {
-        setIsSubmitting(false);
+        body: formData,
       });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.status !== 'success') {
+        const detail = typeof data.detail === 'string' ? data.detail : `Upload failed (${response.status})`;
+        throw new Error(detail);
+      }
+
+      await loadBooks();
+      setSelectedFile(null);
+      setCurrentBook({ chapters: ['Chapter 1'] });
+      setBookName('');
+      setStartPage('');
+      setEndPage('');
+    } catch (error) {
+      console.error('Error:', error);
+      setFormError(error instanceof Error ? error.message : 'Failed to process PDF');
+      // Server may still have finished — refresh list so the book appears if it did.
+      await loadBooks().catch(() => {});
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -149,8 +154,7 @@ const Index = () => {
   };
 
   const handleBookSelect = (book_name: string) => {
-    // localStorage.setItem('selectedBook', JSON.stringify(book));
-    navigate(`/summary?book=${book_name}`);
+    navigate(`/summary?book=${encodeURIComponent(book_name)}`);
   };
 
   return (
@@ -315,6 +319,11 @@ const Index = () => {
                 'Add Book'
               )}
             </Button>
+            {formError && (
+              <p className="text-sm text-red-400" role="alert">
+                {formError}
+              </p>
+            )}
           </Card>
 
           {books.length > 0 && (
