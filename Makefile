@@ -10,7 +10,7 @@ help:
 	@echo "make dev       API on :8000 and UI on :5173"
 	@echo "make backend   API only"
 	@echo "make frontend  UI only"
-	@echo "make test      pytest and frontend typecheck + production build"
+	@echo "make test      pytest, frontend vitest, and production build"
 	@echo "make stop      Free ports 8000 and 5173"
 
 setup: $(PY)
@@ -53,7 +53,7 @@ frontend: setup
 
 test: $(PY)
 	cd $(ROOT)/backend && $(PY) -m pytest -q
-	cd $(ROOT)/frontend && npm install && npm run build
+	cd $(ROOT)/frontend && npm install && npm test && npm run build
 
 build: test
 

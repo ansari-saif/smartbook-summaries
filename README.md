@@ -4,10 +4,12 @@ Upload a PDF, name the chapters, and get a plain-English rewrite plus a short su
 
 The UI is the React app from [smartbook-summaries](https://github.com/ansari-saif/smartbook-summaries). The API is the FastAPI service that used to live in `ansarisaif-alt/book-backend`.
 
+See [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) for architecture and [docs/CHANGELOG.md](docs/CHANGELOG.md) for recent changes.
+
 ## Run
 
 ```bash
-cp backend/.env.example backend/.env   # set OPENAI_KEY before processing a real PDF
+cp backend/.env.example backend/.env   # set OPENROUTER_KEY before processing a real PDF
 make setup
 make dev
 ```
@@ -18,7 +20,9 @@ make dev
 | http://127.0.0.1:8000/docs | API docs |
 | http://127.0.0.1:8000/health | Health check |
 
-`make test` runs the API tests and a production frontend build. Chapter processing calls OpenAI only when you upload a PDF; the tests stub that call.
+`make test` runs the API tests, frontend Vitest suite, and a production frontend build. Chapter processing calls OpenRouter (`z-ai/glm-4.7-flash` by default, or `z-ai/glm-5.3-flashx` via `OPENROUTER_MODEL`) only when you upload a PDF; the tests stub that call.
+
+Drop a PDF onto the upload zone or click it to choose a file.
 
 ## API
 

@@ -11,7 +11,10 @@ from openai import OpenAI
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1"
+DEFAULT_MODEL = "z-ai/glm-4.7-flash"
 
 
 def data_dir() -> Path:
@@ -30,10 +33,10 @@ def safe_name(name: str) -> str:
 
 
 def _client() -> OpenAI:
-    key = os.getenv("OPENAI_KEY")
+    key = os.getenv("OPENROUTER_KEY")
     if not key:
-        raise RuntimeError("OPENAI_KEY is not set")
-    return OpenAI(api_key=key)
+        raise RuntimeError("OPENROUTER_KEY is not set")
+    return OpenAI(base_url=OPENROUTER_URL, api_key=key)
 
 
 def create_pdf(book_name, filename, text, max_width=80):
@@ -65,15 +68,19 @@ def create_pdf(book_name, filename, text, max_width=80):
 
 def _chat(system: str, prompt: str) -> str:
     response = _client().chat.completions.create(
-        model="gpt-3.5-turbo",
+        model=os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL),
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ],
         temperature=0,
         max_tokens=2048,
+        extra_body={"reasoning": {"enabled": False}},
     )
-    return response.choices[0].message.content.strip().strip("```json").strip("```")
+    content = response.choices[0].message.content
+    if not content:
+        raise RuntimeError("model returned an empty response")
+    return content.strip().strip("```json").strip("```")
 
 
 def get_ai_response(prompt):

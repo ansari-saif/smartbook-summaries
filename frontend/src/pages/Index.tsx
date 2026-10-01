@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BookGrid, Book } from '@/components/BookGrid';
 import { api } from '@/api';
+import { isPdfFile } from '@/lib/pdf';
 
 interface APIBook {
   book_name: string;
@@ -22,6 +23,8 @@ const Index = () => {
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -44,11 +47,36 @@ const Index = () => {
       });
   }, []);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      setSelectedFile(file);
+  const acceptPdf = (file: File | undefined | null) => {
+    if (!isPdfFile(file)) {
+      setUploadError('Please drop or choose a PDF file.');
+      return;
     }
+    setUploadError('');
+    setSelectedFile(file);
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    acceptPdf(event.target.files?.[0]);
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+    acceptPdf(event.dataTransfer.files?.[0]);
   };
 
   const addChapter = () => {
@@ -152,21 +180,42 @@ const Index = () => {
                 Upload A New Book
               </label>
               <div className="flex justify-center">
-                <label className="w-full cursor-pointer">
-                  <div className="border-2 border-dashed border-primary/50 rounded-lg p-8 text-center hover:border-primary transition-colors">
+                <label
+                  className="w-full cursor-pointer"
+                  onDragOver={handleDragOver}
+                  onDragEnter={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  <div
+                    className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                      isDragging
+                        ? 'border-primary bg-primary/10'
+                        : 'border-primary/50 hover:border-primary'
+                    }`}
+                  >
                     <Upload className="mx-auto h-12 w-12 text-primary mb-4" />
                     <p className="text-sm text-gray-400">
-                      {selectedFile ? selectedFile.name : 'Drop your PDF here or click to upload'}
+                      {selectedFile
+                        ? selectedFile.name
+                        : isDragging
+                          ? 'Release to upload PDF'
+                          : 'Drop your PDF here or click to upload'}
                     </p>
                     <input
                       type="file"
                       className="hidden"
-                      accept=".pdf"
+                      accept=".pdf,application/pdf"
                       onChange={handleFileChange}
                     />
                   </div>
                 </label>
               </div>
+              {uploadError && (
+                <p className="text-sm text-red-400" role="alert">
+                  {uploadError}
+                </p>
+              )}
             </div>
             <div className="space-y-4">
               <div className="space-y-2">
