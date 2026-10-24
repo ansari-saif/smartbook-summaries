@@ -1,26 +1,38 @@
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 PY   := $(ROOT)/backend/.venv/bin/python
+NODE_DEPS := $(ROOT)/frontend/node_modules/.deps-stamp
+PY_DEPS := $(ROOT)/backend/.venv/.deps-stamp
 API  := http://127.0.0.1:8000
 UI   := http://127.0.0.1:5173
 
-.PHONY: setup dev backend frontend test build stop help
+.PHONY: setup start dev backend frontend test build stop help
 
 help:
 	@echo "make setup     Create the Python venv and install frontend deps"
+	@echo "make start     API on :8000 and UI on :5173 (alias for make dev)"
 	@echo "make dev       API on :8000 and UI on :5173"
 	@echo "make backend   API only"
 	@echo "make frontend  UI only"
 	@echo "make test      pytest, frontend vitest, and production build"
 	@echo "make stop      Free ports 8000 and 5173"
 
-setup: $(PY)
-	cd $(ROOT)/frontend && npm install
+setup: $(PY_DEPS) $(NODE_DEPS)
 
-$(PY): $(ROOT)/backend/requirements.txt
+$(NODE_DEPS): $(ROOT)/frontend/package.json $(ROOT)/frontend/package-lock.json
+	cd $(ROOT)/frontend && npm install
+	@touch $(NODE_DEPS)
+
+# Stamp file: .venv/bin/python is a symlink whose timestamp never
+# becomes newer than requirements.txt, so keying off it reinstalled
+# Python deps on every run.
+$(PY_DEPS): $(ROOT)/backend/requirements.txt
 	python3 -m venv $(ROOT)/backend/.venv
 	$(PY) -m pip install -r $(ROOT)/backend/requirements.txt
+	@touch $(PY_DEPS)
 
-dev: setup
+start: dev
+
+dev: $(PY_DEPS) $(NODE_DEPS)
 	@$(MAKE) stop
 	@BACKEND_PID=""; FRONTEND_PID=""; \
 	cleanup() { \
@@ -45,15 +57,15 @@ dev: setup
 	echo; echo "Smartbook is up"; echo "  UI  → $(UI)"; echo "  API → $(API)/docs"; echo "Press Ctrl+C to stop both."; echo; \
 	wait
 
-backend: $(PY)
+backend: $(PY_DEPS)
 	cd $(ROOT)/backend && $(PY) -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 
-frontend: setup
+frontend: $(NODE_DEPS)
 	cd $(ROOT)/frontend && npm run dev -- --host 127.0.0.1 --port 5173
 
-test: $(PY)
+test: $(PY_DEPS) $(NODE_DEPS)
 	cd $(ROOT)/backend && $(PY) -m pytest -q
-	cd $(ROOT)/frontend && npm install && npm test && npm run build
+	cd $(ROOT)/frontend && npm test && npm run build
 
 build: test
 
