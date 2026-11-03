@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Download, ArrowLeft, Loader2, Maximize2, Minimize2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Download, Loader2, Maximize2, Minimize2 } from 'lucide-react';
 import { api } from '@/api';
+import { Ribbon } from '@/components/Shelf';
+import {
+  chapterStorageKey,
+  focusStorageKey,
+  place,
+  scrollStorageKey,
+  storedChapter,
+} from '@/lib/binding';
 
 interface BookDetails {
   book_name: string;
@@ -16,7 +20,7 @@ function renderInline(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
   return parts.map((part, index) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={index} className="text-primary-contrast font-semibold">{part.slice(2, -2)}</strong>;
+      return <strong key={index} className="font-semibold text-paper">{part.slice(2, -2)}</strong>;
     }
     if (part.startsWith('*') && part.endsWith('*')) {
       return <em key={index}>{part.slice(1, -1)}</em>;
@@ -24,6 +28,9 @@ function renderInline(text: string) {
     return <React.Fragment key={index}>{part}</React.Fragment>;
   });
 }
+
+const BODY = 'text-[1.0625rem] leading-[1.75] text-paper/90 sm:text-lg';
+const SUBHEAD = 'pt-4 font-read text-xl font-semibold leading-snug text-paper';
 
 function FormattedChapter({ text, title }: { text: string; title: string }) {
   const blocks: React.ReactNode[] = [];
@@ -42,7 +49,7 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
 
     if (looksNumbered) {
       blocks.push(
-        <ol key={`ol-${blocks.length}`} className="list-decimal space-y-2 pl-5 text-gray-300 leading-7">
+        <ol key={`ol-${blocks.length}`} className={`list-decimal space-y-2 pl-6 marker:text-foil/80 ${BODY}`}>
           {inlineNumbered.map((item, index) => (
             <li key={index}>{renderInline(item.replace(/^\d+\.\s+/, ''))}</li>
           ))}
@@ -50,7 +57,7 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
       );
     } else {
       blocks.push(
-        <p key={`p-${blocks.length}`} className="text-gray-300 leading-7">
+        <p key={`p-${blocks.length}`} className={BODY}>
           {renderInline(joined)}
         </p>
       );
@@ -61,7 +68,7 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
   const flushList = () => {
     if (list.length === 0) return;
     blocks.push(
-      <ul key={`ul-${blocks.length}`} className="list-disc space-y-2 pl-5 text-gray-300 leading-7">
+      <ul key={`ul-${blocks.length}`} className={`list-disc space-y-2 pl-6 marker:text-foil/80 ${BODY}`}>
         {list.map((item, index) => (
           <li key={index}>{renderInline(item)}</li>
         ))}
@@ -73,7 +80,7 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
   const flushOrderedList = () => {
     if (orderedList.length === 0) return;
     blocks.push(
-      <ol key={`ol-${blocks.length}`} className="list-decimal space-y-2 pl-5 text-gray-300 leading-7">
+      <ol key={`ol-${blocks.length}`} className={`list-decimal space-y-2 pl-6 marker:text-foil/80 ${BODY}`}>
         {orderedList.map((item, index) => (
           <li key={index}>{renderInline(item)}</li>
         ))}
@@ -100,9 +107,10 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
     if (/^summary\s*:/i.test(line)) {
       flushAll();
       blocks.push(
-        <h3 key={`h-${blocks.length}`} className="pt-4 text-lg font-semibold text-primary-contrast">
-          Summary
-        </h3>
+        <div key={`h-${blocks.length}`} className="pt-8">
+          <div className="headband h-1 w-16 rounded-full" aria-hidden />
+          <h3 className="foil mt-4 text-sm font-medium">Summary</h3>
+        </div>
       );
       return;
     }
@@ -110,7 +118,7 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
     if (heading) {
       flushAll();
       blocks.push(
-        <h3 key={`h-${blocks.length}`} className="pt-2 text-lg font-semibold text-primary-contrast">
+        <h3 key={`h-${blocks.length}`} className={SUBHEAD}>
           {heading[1]}
         </h3>
       );
@@ -119,7 +127,7 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
     if (/^\*\*[^*]+\*\*$/.test(line)) {
       flushAll();
       blocks.push(
-        <h3 key={`h-${blocks.length}`} className="pt-2 text-lg font-semibold text-primary-contrast">
+        <h3 key={`h-${blocks.length}`} className={SUBHEAD}>
           {line.slice(2, -2)}
         </h3>
       );
@@ -146,39 +154,20 @@ function FormattedChapter({ text, title }: { text: string; title: string }) {
 
   flushAll();
 
-  return <div className="space-y-4">{blocks}</div>;
+  return <div className="space-y-5 font-read">{blocks}</div>;
 }
 
 const LoadingScreen = () => (
-  <div className="min-h-screen bg-background flex items-center justify-center">
-    <div className="text-center space-y-6 p-8 max-w-md">
-      <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
-      <div className="space-y-3">
-        <h3 className="text-xl font-semibold text-primary-contrast">
-          Please wait a moment...
-        </h3>
-        <p className="text-gray-400">
-          This might take some time. Why not grab a ☕️ while we prepare your book summary?
-        </p>
-      </div>
+  <div className="cloth flex min-h-[100dvh] items-center justify-center px-6">
+    <div className="w-full max-w-xs text-center" role="status">
+      <p className="foil text-sm font-medium">Opening the book</p>
+      <div className="headband band-run mt-4 h-1 w-full rounded-full" aria-hidden />
     </div>
   </div>
 );
 
-function scrollStorageKey(book: string, chapter: string) {
-  return `smartbook-scroll:${book}::${chapter}`;
-}
-
 function detailsStorageKey(book: string) {
   return `smartbook-details:${book}`;
-}
-
-function fullscreenStorageKey(book: string) {
-  return `smartbook-fs:${book}`;
-}
-
-function chapterStorageKey(book: string) {
-  return `smartbook-chapter:${book}`;
 }
 
 function loadCachedDetails(book: string | null): BookDetails | null {
@@ -196,14 +185,6 @@ function loadCachedDetails(book: string | null): BookDetails | null {
   return null;
 }
 
-function readStoredChapter(book: string | null, chapterCount = Infinity) {
-  if (!book) return 0;
-  const n = Number(sessionStorage.getItem(chapterStorageKey(book)) ?? '0');
-  if (!Number.isFinite(n) || n < 0) return 0;
-  if (Number.isFinite(chapterCount) && n >= chapterCount) return 0;
-  return n;
-}
-
 const Summary = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -213,49 +194,21 @@ const Summary = () => {
   const [bookDetails, setBookDetails] = useState<BookDetails | null>(cachedDetails);
   const [isLoading, setIsLoading] = useState(!cachedDetails);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(
-    () => !!bookName && sessionStorage.getItem(fullscreenStorageKey(bookName)) === '1'
+  const [downloadError, setDownloadError] = useState('');
+  const [isFocus, setIsFocus] = useState(
+    () => !!bookName && place.get(focusStorageKey(bookName)) === '1'
   );
-  const [currentChapter, setCurrentChapter] = useState(() => readStoredChapter(bookName));
+  const [currentChapter, setCurrentChapter] = useState(() => (bookName ? storedChapter(bookName) ?? 0 : 0));
   const [scrollPercent, setScrollPercent] = useState(0);
-  const [scrollIndicatorVisible, setScrollIndicatorVisible] = useState(false);
-  const readerRef = useRef<HTMLDivElement>(null);
-  const readerShellRef = useRef<HTMLDivElement>(null);
-  const scrollHideTimerRef = useRef<number | null>(null);
-  const prevChapterRef = useRef(currentChapter);
+  const [percentVisible, setPercentVisible] = useState(false);
+  const percentTimerRef = useRef<number | null>(null);
+  const readerRef = useRef<HTMLElement>(null);
   const bookDetailsRef = useRef(bookDetails);
   const currentChapterRef = useRef(currentChapter);
-  const isFullscreenRef = useRef(isFullscreen);
   bookDetailsRef.current = bookDetails;
   currentChapterRef.current = currentChapter;
-  isFullscreenRef.current = isFullscreen;
 
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(
-    () => (typeof document !== 'undefined' && isFullscreen ? document.body : null)
-  );
-
-  const setInlineSlot = (node: HTMLDivElement | null) => {
-    if (isFullscreenRef.current) return;
-    setPortalTarget(node);
-  };
-
-  const clearScrollHideTimer = () => {
-    if (scrollHideTimerRef.current !== null) {
-      window.clearTimeout(scrollHideTimerRef.current);
-      scrollHideTimerRef.current = null;
-    }
-  };
-
-  const showScrollIndicatorBriefly = () => {
-    setScrollIndicatorVisible(true);
-    clearScrollHideTimer();
-    scrollHideTimerRef.current = window.setTimeout(() => {
-      setScrollIndicatorVisible(false);
-      scrollHideTimerRef.current = null;
-    }, 3000);
-  };
-
-  const updateScrollPercent = (el: HTMLDivElement) => {
+  const updateScrollPercent = (el: HTMLElement) => {
     const max = el.scrollHeight - el.clientHeight;
     if (max <= 0) {
       setScrollPercent(100);
@@ -264,16 +217,29 @@ const Summary = () => {
     setScrollPercent(Math.min(100, Math.max(0, Math.round((el.scrollTop / max) * 100))));
   };
 
-  const saveReaderScroll = (el?: HTMLDivElement | null) => {
+  const showPercentBriefly = () => {
+    setPercentVisible(true);
+    if (percentTimerRef.current !== null) window.clearTimeout(percentTimerRef.current);
+    percentTimerRef.current = window.setTimeout(() => {
+      setPercentVisible(false);
+      percentTimerRef.current = null;
+    }, 3000);
+  };
+
+  useEffect(
+    () => () => {
+      if (percentTimerRef.current !== null) window.clearTimeout(percentTimerRef.current);
+    },
+    []
+  );
+
+  const saveReaderScroll = (el?: HTMLElement | null) => {
     const node = el ?? readerRef.current;
     const details = bookDetailsRef.current;
     if (!node || !details) return;
     const chapter = Object.keys(details.data)[currentChapterRef.current];
     if (!chapter) return;
-    sessionStorage.setItem(
-      scrollStorageKey(details.book_name, chapter),
-      String(Math.round(node.scrollTop))
-    );
+    place.set(scrollStorageKey(details.book_name, chapter), String(Math.round(node.scrollTop)));
   };
 
   const restoreReaderScroll = () => {
@@ -282,7 +248,7 @@ const Summary = () => {
     if (!el || !details) return;
     const chapter = Object.keys(details.data)[currentChapterRef.current];
     if (!chapter) return;
-    const raw = sessionStorage.getItem(scrollStorageKey(details.book_name, chapter));
+    const raw = place.get(scrollStorageKey(details.book_name, chapter));
     const top = raw == null ? 0 : Number(raw);
     const apply = () => {
       if (!readerRef.current) return;
@@ -292,26 +258,27 @@ const Summary = () => {
     requestAnimationFrame(() => requestAnimationFrame(apply));
   };
 
-  const handleReaderScroll = (event: React.UIEvent<HTMLDivElement>) => {
-    updateScrollPercent(event.currentTarget);
-    saveReaderScroll(event.currentTarget);
-    showScrollIndicatorBriefly();
-  };
+  // Horizontal only: scrollIntoView would also move the page vertically.
+  const scrollChipIntoView = useCallback(
+    (node: HTMLButtonElement | null) => {
+      const strip = node?.closest('nav');
+      if (!node || !strip || strip.scrollWidth <= strip.clientWidth) return;
+      const offset = node.getBoundingClientRect().left - strip.getBoundingClientRect().left;
+      const left = strip.scrollLeft + offset - (strip.clientWidth - node.offsetWidth) / 2;
+      strip.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentChapter]
+  );
 
-  const handleChapterSelect = (index: number) => {
+  const selectChapter = (index: number) => {
     saveReaderScroll();
     setCurrentChapter(index);
   };
 
-  const toggleFullscreen = () => {
+  const setFocus = (next: boolean) => {
     saveReaderScroll();
-    setIsFullscreen((value) => {
-      const next = !value;
-      if (bookName) {
-        sessionStorage.setItem(fullscreenStorageKey(bookName), next ? '1' : '0');
-      }
-      return next;
-    });
+    setIsFocus(next);
   };
 
   useEffect(() => {
@@ -356,92 +323,61 @@ const Summary = () => {
 
   useEffect(() => {
     if (!bookName) return;
-    sessionStorage.setItem(fullscreenStorageKey(bookName), isFullscreen ? '1' : '0');
-  }, [bookName, isFullscreen]);
+    place.set(focusStorageKey(bookName), isFocus ? '1' : '0');
+  }, [bookName, isFocus]);
 
   useEffect(() => {
     if (!bookName) return;
-    sessionStorage.setItem(chapterStorageKey(bookName), String(currentChapter));
+    place.set(chapterStorageKey(bookName), String(currentChapter));
   }, [bookName, currentChapter]);
 
   useEffect(() => {
+    if (!isFocus) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || !isFullscreen) return;
-      saveReaderScroll();
-      setIsFullscreen(false);
-      if (bookName) sessionStorage.setItem(fullscreenStorageKey(bookName), '0');
+      if (event.key === 'Escape') setFocus(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [bookName, isFullscreen]);
-
-  useEffect(() => {
-    if (!isFullscreen) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [isFullscreen]);
-
-  // Keep one portal host: inline slot normally, document.body in fullscreen.
-  useEffect(() => {
-    if (isFullscreen) {
-      setPortalTarget(document.body);
-    }
-  }, [isFullscreen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFocus]);
 
   useEffect(() => {
     if (!bookDetails) return;
-    if (prevChapterRef.current !== currentChapter) {
-      prevChapterRef.current = currentChapter;
-      setScrollIndicatorVisible(false);
-      clearScrollHideTimer();
-    }
     restoreReaderScroll();
-  }, [currentChapter, bookDetails, isFullscreen, portalTarget]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentChapter, bookDetails, isFocus]);
 
   useEffect(() => {
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        saveReaderScroll();
-        return;
-      }
-      if (bookName) {
-        setIsFullscreen(sessionStorage.getItem(fullscreenStorageKey(bookName)) === '1');
-      }
-      restoreReaderScroll();
+      if (document.visibilityState === 'hidden') saveReaderScroll();
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [bookName]);
-
-  useEffect(() => () => clearScrollHideTimer(), []);
+  }, []);
 
   const handleDownloadPDF = async () => {
     if (!bookDetails) return;
-    const chapters = Object.keys(bookDetails.data);
-    const currentChapterName = chapters[currentChapter];
+    const chapterName = Object.keys(bookDetails.data)[currentChapter];
     setIsDownloading(true);
+    setDownloadError('');
     try {
       const response = await fetch(
-        api(`/chapter-pdf?book_name=${encodeURIComponent(bookDetails.book_name)}&chapter_name=${encodeURIComponent(currentChapterName)}`),
-        { method: 'GET' }
+        api(`/chapter-pdf?book_name=${encodeURIComponent(bookDetails.book_name)}&chapter_name=${encodeURIComponent(chapterName)}`)
       );
-
       if (!response.ok) throw new Error('PDF download failed');
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${bookDetails.book_name}-${currentChapterName}.pdf`;
+      a.download = `${bookDetails.book_name}-${chapterName}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
       console.error('Error downloading PDF:', error);
+      setDownloadError('The chapter PDF could not be downloaded. Try again.');
     } finally {
       setIsDownloading(false);
     }
@@ -454,164 +390,182 @@ const Summary = () => {
   if (!bookDetails) return null;
 
   const chapters = Object.keys(bookDetails.data);
-  const reader = (
-    <div
-      ref={readerShellRef}
-      className={
-        isFullscreen
-          ? 'fixed inset-0 z-[100] flex h-screen flex-col bg-background'
-          : 'relative max-h-[70vh]'
-      }
-    >
-      <div
-        className={`pointer-events-none absolute inset-x-0 top-0 z-20 h-1 bg-white/10 transition-opacity duration-300 ${
-          scrollIndicatorVisible ? 'opacity-100' : 'opacity-0'
-        }`}
-        aria-hidden
-      >
-        <div
-          className="h-full bg-primary transition-[width] duration-75 ease-out"
-          style={{ width: `${scrollPercent}%` }}
-        />
-      </div>
-
-      <div
-        className={`pointer-events-none absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-2 transition-opacity duration-300 ${
-          scrollIndicatorVisible ? 'opacity-100' : 'opacity-0'
-        }`}
-        aria-live="polite"
-        aria-label={`Reading progress ${scrollPercent} percent`}
-      >
-        <div className="relative h-28 w-1.5 overflow-hidden rounded-full bg-white/15">
-          <div
-            className="absolute inset-x-0 top-0 rounded-full bg-primary transition-[height] duration-75 ease-out"
-            style={{ height: `${scrollPercent}%` }}
-          />
-        </div>
-        <span className="rounded-md bg-background/90 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-primary-contrast shadow-sm ring-1 ring-white/10">
-          {scrollPercent}%
-        </span>
-      </div>
-
-      <div
-        ref={readerRef}
-        onScroll={handleReaderScroll}
-        className={`h-full overflow-y-auto bg-background ${
-          isFullscreen
-            ? 'max-h-none p-8 md:p-12'
-            : 'max-h-[70vh] rounded-lg border border-white/10 bg-background-light p-6'
-        }`}
-      >
-        {isFullscreen && (
-          <div className="mb-8 flex items-center justify-between gap-4">
-            <h2 className="text-2xl font-semibold text-primary-contrast">
-              {chapters[currentChapter]}
-            </h2>
-            <Button variant="outline" onClick={toggleFullscreen}>
-              <Minimize2 className="mr-2 h-4 w-4" />
-              Exit full screen
-            </Button>
-          </div>
-        )}
-        <FormattedChapter
-          title={chapters[currentChapter]}
-          text={bookDetails.data[chapters[currentChapter]]}
-        />
-      </div>
-    </div>
-  );
+  const chapterName = chapters[currentChapter];
+  const next = currentChapter + 1 < chapters.length ? currentChapter + 1 : null;
+  const prev = currentChapter > 0 ? currentChapter - 1 : null;
 
   return (
-    <>
-    <div className="min-h-screen bg-background p-6 animate-in">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <motion.header
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center space-y-4"
-        >
-          <Button variant="ghost" className="mb-4" onClick={() => navigate('/')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Books
-          </Button>
-          <h1 className="text-4xl font-bold text-primary-contrast">
+    <div className="cloth flex h-[100dvh] flex-col">
+      {!isFocus && (
+        <header className="flex min-h-14 shrink-0 items-center gap-2 px-2 py-1 sm:h-16 sm:gap-4 sm:px-4 sm:py-0">
+          <Link
+            to="/"
+            onClick={() => saveReaderScroll()}
+            className="flex h-11 shrink-0 items-center gap-2 rounded-[3px] px-3 font-stamp text-xs font-medium uppercase tracking-[0.14em] text-paper-muted transition-colors hover:bg-black/20 hover:text-paper"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Shelf</span>
+            <span className="sr-only sm:hidden">Back to shelf</span>
+          </Link>
+          <h1 className="foil line-clamp-2 min-w-0 flex-1 text-center text-sm font-medium leading-snug !tracking-[0.08em] sm:line-clamp-1 sm:text-base sm:!tracking-[0.16em]">
             {bookDetails.book_name}
           </h1>
-          <p className="text-lg text-gray-400">
-            AI-Generated Summary
-          </p>
-        </motion.header>
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <button
+              onClick={() => setFocus(true)}
+              className="foil-line h-11 w-11 border-transparent sm:w-auto sm:border-foil/40 sm:px-4"
+              aria-label="Focus mode"
+            >
+              <Maximize2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Focus</span>
+            </button>
+            <button
+              onClick={handleDownloadPDF}
+              disabled={isDownloading}
+              className="foil-line h-11 w-11 border-transparent disabled:opacity-60 sm:w-auto sm:border-foil/40 sm:px-4"
+              aria-label="Download chapter PDF"
+            >
+              {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              <span className="hidden sm:inline">PDF</span>
+            </button>
+          </div>
+        </header>
+      )}
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <Card className="glass-panel p-6">
-            <div className="flex justify-between items-center mb-6">
-              <div className="space-y-1">
-                <h2 className="text-xl font-semibold text-primary-contrast">
-                  {chapters[currentChapter]}
-                </h2>
-                <p className="text-sm text-gray-400">
-                  Summary generated by AI
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={toggleFullscreen}
-              >
-                <Maximize2 className="mr-2 h-4 w-4" />
-                Full screen
-              </Button>
-              <Button 
-                className="button-gradient" 
-                onClick={handleDownloadPDF}
-                disabled={isDownloading}
-              >
-                {isDownloading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                {isDownloading ? 'Downloading...' : 'Download PDF'}
-              </Button>
-              </div>
-            </div>
+      <div
+        className="relative h-1.5 shrink-0 bg-black/30"
+        role="progressbar"
+        aria-label="Chapter read"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={scrollPercent}
+      >
+        <div className="headband h-full opacity-25" aria-hidden />
+        <div
+          className="headband absolute inset-y-0 left-0 transition-[width] duration-100 ease-out"
+          style={{ width: `${scrollPercent}%` }}
+          aria-hidden
+        />
+      </div>
 
-            <div className="grid grid-cols-12 gap-6">
-              <motion.div
-                className="col-span-3"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-              >
-                <nav className="space-y-2">
-                  {chapters.map((chapter, index) => (
-                    <motion.button
-                      key={index}
-                      onClick={() => handleChapterSelect(index)}
-                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${
-                        currentChapter === index
-                          ? 'bg-primary text-white'
-                          : 'hover:bg-primary/20 text-gray-400'
+      {downloadError && !isFocus && (
+        <p className="shrink-0 bg-black/30 px-4 py-2 text-center font-stamp text-sm text-error" role="alert">
+          {downloadError}
+        </p>
+      )}
+
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        {!isFocus && (
+          <nav
+            aria-label="Contents"
+            className="shrink-0 overflow-x-auto [mask-image:linear-gradient(to_right,black_85%,transparent)] [scrollbar-width:none] md:w-72 md:[mask-image:none] md:overflow-y-auto md:overflow-x-visible md:px-3 md:py-8 lg:w-80 [&::-webkit-scrollbar]:hidden"
+          >
+            <h2 className="stamp-label hidden px-3 pb-4 md:block">Contents</h2>
+            <ol className="flex gap-1 px-2 py-2 md:flex-col md:px-0 md:py-0">
+              {chapters.map((chapter, index) => {
+                const active = currentChapter === index;
+                return (
+                  <li key={chapter} className="shrink-0">
+                    <button
+                      ref={active ? scrollChipIntoView : undefined}
+                      onClick={() => selectChapter(index)}
+                      aria-current={active ? 'true' : undefined}
+                      className={`relative flex min-h-11 max-w-[70vw] items-baseline gap-3 rounded-[3px] py-2.5 pl-8 pr-3 text-left font-stamp text-sm transition-colors md:w-full md:max-w-none ${
+                        active ? 'text-foil' : 'text-paper-muted hover:bg-black/20 hover:text-paper'
                       }`}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
                     >
-                      {chapter}
-                    </motion.button>
-                  ))}
-                </nav>
-              </motion.div>
+                      {active && (
+                        <span className="absolute left-2 top-0 h-7 w-3.5">
+                          <Ribbon />
+                        </span>
+                      )}
+                      <span className="shrink-0 tabular-nums text-xs opacity-70">{index + 1}</span>
+                      <span className="truncate md:whitespace-normal md:leading-snug">{chapter}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        )}
 
-              <div
-                ref={setInlineSlot}
-                className={`col-span-9 ${isFullscreen ? 'min-h-[70vh]' : ''}`}
-              />
+        <main
+          ref={readerRef}
+          onScroll={(event) => {
+            updateScrollPercent(event.currentTarget);
+            saveReaderScroll(event.currentTarget);
+            showPercentBriefly();
+          }}
+          className="page-ground relative min-h-0 flex-1 overflow-y-auto overscroll-contain md:rounded-tl-[6px] md:shadow-[inset_0_1px_0_rgb(255_255_255/0.04),-12px_0_24px_-18px_rgb(0_0_0/0.8)]"
+        >
+          <span
+            className={`pointer-events-none fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-20 rounded-[3px] bg-black/60 px-2.5 py-1.5 font-stamp text-sm font-medium tabular-nums text-foil shadow-[0_6px_14px_-8px_rgb(0_0_0/0.8)] transition-opacity duration-300 ${
+              percentVisible ? 'opacity-100' : 'opacity-0'
+            }`}
+            aria-hidden
+          >
+            {scrollPercent}%
+          </span>
+          {isFocus && (
+            <button
+              onClick={() => setFocus(false)}
+              className="foil-line fixed right-3 top-4 z-20 h-11 bg-black/50 px-3 hover:bg-black/60"
+              aria-label="Leave focus mode"
+            >
+              <Minimize2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Leave focus</span>
+            </button>
+          )}
+          <article key={chapterName} className="page-in mx-auto max-w-[66ch] px-5 pb-16 pt-8 sm:px-8 sm:pt-12 md:pt-16">
+            <h2 className="font-read text-[1.75rem] font-semibold leading-tight text-paper [text-wrap:balance] sm:text-4xl">
+              {chapterName}
+            </h2>
+            <div className="mt-8">
+              <FormattedChapter title={chapterName} text={bookDetails.data[chapterName]} />
             </div>
-          </Card>
-        </motion.div>
+
+            <nav aria-label="Chapter" className="mt-16 flex flex-col gap-3 border-t border-foil/20 pt-8 sm:flex-row">
+              {prev !== null && (
+                <button
+                  onClick={() => selectChapter(prev)}
+                  className="flex min-h-14 flex-1 items-center gap-3 rounded-[3px] px-4 py-3 text-left transition-colors hover:bg-black/25"
+                >
+                  <ArrowLeft className="h-4 w-4 shrink-0 text-foil" />
+                  <span className="min-w-0">
+                    <span className="stamp-label block text-[11px]">Previous</span>
+                    <span className="block truncate font-stamp text-sm text-paper">{chapters[prev]}</span>
+                  </span>
+                </button>
+              )}
+              {next !== null ? (
+                <button
+                  onClick={() => selectChapter(next)}
+                  className="flex min-h-14 flex-1 items-center justify-end gap-3 rounded-[3px] bg-black/25 px-4 py-3 text-right transition-colors hover:bg-black/40"
+                >
+                  <span className="min-w-0">
+                    <span className="stamp-label block text-[11px]">Next chapter</span>
+                    <span className="block truncate font-stamp text-sm text-paper">{chapters[next]}</span>
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-foil" />
+                </button>
+              ) : (
+                <Link
+                  to="/"
+                  onClick={() => saveReaderScroll()}
+                  className="flex min-h-14 flex-1 items-center justify-end gap-3 rounded-[3px] bg-black/25 px-4 py-3 text-right transition-colors hover:bg-black/40"
+                >
+                  <span>
+                    <span className="stamp-label block text-[11px]">Finished</span>
+                    <span className="block font-stamp text-sm text-paper">Back to the shelf</span>
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-foil" />
+                </Link>
+              )}
+            </nav>
+          </article>
+        </main>
       </div>
     </div>
-    {portalTarget && createPortal(reader, portalTarget)}
-    </>
   );
 };
 

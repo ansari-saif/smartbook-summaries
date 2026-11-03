@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-03T16:35:00+05:30",
+  "title": "Design System: Smartbook",
+  "extensions": {
+    "colorMeta": {
+      "library": { "role": "primary", "displayName": "Library Black", "canonical": "#0B0B0C", "tonalRamp": ["#040E09", "#182922", "#31483E", "#4C695C", "#6C8A7D", "#92ACA0", "#B9CFC5", "#E3F3EB"] },
+      "library-deep": { "role": "primary", "displayName": "Library Shadow", "canonical": "#1A1A1C", "tonalRamp": ["#060D0A", "#1B2823", "#35473F", "#51675E", "#71887F", "#96ABA2", "#BDCEC7", "#E6F2ED"] },
+      "foil": { "role": "secondary", "displayName": "Gold Foil", "canonical": "#D8B45C", "tonalRamp": ["#140800", "#342100", "#573E00", "#7B5C00", "#9E7E29", "#BEA25F", "#DEC792", "#FEEDC7"] },
+      "foil-bright": { "role": "secondary", "displayName": "Bright Foil", "canonical": "#EDD08A", "tonalRamp": ["#130900", "#312300", "#533F03", "#765E1B", "#987F40", "#B9A36E", "#DAC89C", "#FBEECE"] },
+      "foil-deep": { "role": "secondary", "displayName": "Deep Foil", "canonical": "#A9873A", "tonalRamp": ["#140900", "#342100", "#563E00", "#7A5C0B", "#9D7D37", "#BDA167", "#DDC698", "#FDEDCB"] },
+      "foil-ink": { "role": "secondary", "displayName": "Foil Ink", "canonical": "#1B1A14", "tonalRamp": ["#0C0B09", "#262521", "#43423D", "#62615B", "#84837B", "#A6A59F", "#CAC9C4", "#EFEFEB"] },
+      "ribbon": { "role": "tertiary", "displayName": "Silk Ribbon", "canonical": "#B0322E", "tonalRamp": ["#220000", "#4C0204", "#781918", "#A7332E", "#CE574F", "#EC8378", "#FFAFA5", "#FFDCD4"] },
+      "error-rose": { "role": "tertiary", "displayName": "Error Rose", "canonical": "#F0A39A", "tonalRamp": ["#1A0403", "#3D1815", "#64312C", "#8C4C46", "#B16D66", "#D0938C", "#EEBBB4", "#FFE4DF"] },
+      "paper": { "role": "neutral", "displayName": "Warm Paper", "canonical": "#ECE6D9", "tonalRamp": ["#0D0B07", "#28251F", "#454239", "#666156", "#878277", "#A9A59B", "#CCC9C1", "#F1EEE8"] },
+      "paper-muted": { "role": "neutral", "displayName": "Faded Paper", "canonical": "#B8B1A2", "tonalRamp": ["#0D0B07", "#28251D", "#464137", "#676154", "#888274", "#AAA499", "#CDC9BF", "#F1EEE7"] },
+      "cloth-madder": { "role": "cloth", "displayName": "Madder Buckram", "canonical": "#7A2E2A", "tonalRamp": ["#1C0202", "#411512", "#682D29", "#924842", "#B76962", "#D69089", "#F3B8B2", "#FFE3DD"] },
+      "band-madder": { "role": "cloth", "displayName": "Madder Band", "canonical": "#3B1513" },
+      "cloth-bottle": { "role": "cloth", "displayName": "Bottle Green Buckram", "canonical": "#1F4A3A", "tonalRamp": ["#020F09", "#122B21", "#294A3D", "#436B5B", "#648D7B", "#8BAE9F", "#B4D1C4", "#DFF4EB"] },
+      "band-bottle": { "role": "cloth", "displayName": "Bottle Band", "canonical": "#0E241B" },
+      "cloth-oxford": { "role": "cloth", "displayName": "Oxford Blue Buckram", "canonical": "#26365E", "tonalRamp": ["#050A19", "#1A243C", "#334162", "#4F6089", "#6F82AC", "#94A5CB", "#BBC9E9", "#E4EFFF"] },
+      "band-oxford": { "role": "cloth", "displayName": "Oxford Band", "canonical": "#111A30" },
+      "cloth-plum": { "role": "cloth", "displayName": "Plum Buckram", "canonical": "#4E2A45", "tonalRamp": ["#130610", "#321D2D", "#54374C", "#78536E", "#9B7490", "#BC99B1", "#DCBFD3", "#FDE7F6"] },
+      "band-plum": { "role": "cloth", "displayName": "Plum Band", "canonical": "#26121F" },
+      "cloth-umber": { "role": "cloth", "displayName": "Umber Buckram", "canonical": "#5A3A22", "tonalRamp": ["#140802", "#332012", "#553C29", "#795942", "#9C7A62", "#BC9E89", "#DDC4B2", "#FDEADE"] },
+      "band-umber": { "role": "cloth", "displayName": "Umber Band", "canonical": "#2B1A0E" },
+      "cloth-slate": { "role": "cloth", "displayName": "Teal Slate Buckram", "canonical": "#24555A", "tonalRamp": ["#000E10", "#0D2A2D", "#24494C", "#3D6A6E", "#5E8B90", "#86ADB1", "#B0D0D3", "#DDF4F6"] },
+      "band-slate": { "role": "cloth", "displayName": "Teal Slate Band", "canonical": "#10292C" },
+      "band-library": { "role": "cloth", "displayName": "Library Band", "canonical": "#050505" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Masthead", "purpose": "The SMARTBOOK masthead only; uppercase foil, 2.25rem on phones to 3.75rem at md." },
+      "headline": { "displayName": "Chapter Title", "purpose": "Head of the reading column; 1.75rem on phones, balanced wrap." },
+      "title": { "displayName": "Stamped Title", "purpose": "Uppercase foil section titles and the reader-bar book title." },
+      "subhead": { "displayName": "Chapter Subhead", "purpose": "Headings inside a chapter rewrite." },
+      "body": { "displayName": "Reading Text", "purpose": "Chapter text at 66ch, paper at 90%; 1.0625rem on phones." },
+      "body-ui": { "displayName": "Control Text", "purpose": "Field text and file names; never below 16px." },
+      "label": { "displayName": "Stamp Label", "purpose": "Uppercase foil labels for fields, sections, Contents and the Summary mark." },
+      "button": { "displayName": "Plate Caps", "purpose": "Foil-plate button text." }
+    },
+    "materials": [
+      { "name": "buckram", "value": "background-color: var(--cloth); background-image: url('/textures/buckram.png'); background-size: 128px 128px; background-blend-mode: soft-light;", "purpose": "Woven cloth over any cloth region. The tile is a neutral, procedurally generated raster with provenance embedded." },
+      { "name": "page-ground", "value": "background-color: color-mix(in oklab, var(--cloth) 38%, var(--band));", "purpose": "The reading page: the book's cloth in shadow." },
+      { "name": "headband", "value": "background-color: var(--band); background-image: linear-gradient(180deg, rgb(255 255 255 / 0.18), transparent 45%, rgb(0 0 0 / 0.3)), repeating-linear-gradient(90deg, #c9a656 0 2px, var(--band) 2px 3px, #8f2f2a 3px 5px, var(--band) 5px 6px);", "purpose": "Silk headband stripe: progress, loading, and ornament." },
+      { "name": "selection", "value": "background: rgb(216 180 92 / 0.85); color: #1b1a14;", "purpose": "Text selection is a foil highlight." },
+      { "name": "scrollbar", "value": "scrollbar-color: rgb(216 180 92 / 0.35) transparent;", "purpose": "Faint foil scroll thumb." }
+    ],
+    "shadows": [
+      { "name": "plate", "value": "0 6px 14px -8px rgb(0 0 0 / 0.7)", "purpose": "Under the foil-plate button; removed when disabled." },
+      { "name": "spine-upright", "value": "0 10px 18px -10px rgb(0 0 0 / 0.9)", "purpose": "A standing book on the shelf." },
+      { "name": "spine-flat", "value": "0 6px 12px -8px rgb(0 0 0 / 0.8)", "purpose": "A book lying in the phone stack." },
+      { "name": "plank", "value": "0 14px 24px -12px rgb(0 0 0 / 0.9), inset 0 1px 0 rgb(255 255 255 / 0.06)", "purpose": "The shelf board." },
+      { "name": "ribbon", "value": "0 4px 8px -4px rgb(0 0 0 / 0.6)", "purpose": "The silk marker hanging off a spine." },
+      { "name": "page-edge", "value": "inset 0 1px 0 rgb(255 255 255 / 0.04), -12px 0 24px -18px rgb(0 0 0 / 0.8)", "purpose": "Reading page set into the binding, md and up." },
+      { "name": "panel-lip", "value": "inset 0 1px 0 rgb(255 255 255 / 0.05)", "purpose": "Top highlight on the workshop panel." }
+    ],
+    "focus": [
+      { "name": "focus-ring", "value": "outline: 2px solid #edd08a; outline-offset: 3px;", "purpose": "Global :focus-visible ring in Bright Foil." },
+      { "name": "field-focus", "value": "border-color: #d8b45c; outline: none;", "purpose": "Fields swap the ring for a full-foil border." }
+    ],
+    "motion": [
+      { "name": "out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Default easing for entrances and the spine lift." },
+      { "name": "page-in", "value": "page-in 450ms cubic-bezier(0.16, 1, 0.3, 1) both (from opacity 0, translateY 10px)", "purpose": "Each chapter's entrance. Disabled under reduced motion." },
+      { "name": "band-run", "value": "band-run 900ms linear infinite (threads shift 24px)", "purpose": "Running headband while the shelf loads, a book opens, or chapters are rewritten. Disabled under reduced motion." },
+      { "name": "spine-lift", "value": "transform translateY(-8px) 300ms out-expo", "purpose": "Upright spine hover, hover-capable devices only." },
+      { "name": "press", "value": "translateY(1px) on the foil plate; translateX(4px) on a flat spine", "purpose": "Pressed state." },
+      { "name": "color", "value": "200ms", "purpose": "Colour, border and wash transitions on controls." },
+      { "name": "progress", "value": "width 100ms ease-out", "purpose": "Headband progress fill following scroll." }
+    ],
+    "breakpoints": [
+      { "name": "phone-check", "value": "390px" },
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Foil Plate Button",
+      "kind": "button",
+      "refersTo": "button-foil-plate",
+      "description": "The one primary action per view: flat gold plate with stamped caps.",
+      "html": "<button class=\"ds-foil-plate\">Bind book</button>",
+      "css": ".ds-foil-plate { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; padding: 0 40px; border: none; border-radius: 3px; background: #d8b45c; color: #1b1a14; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; box-shadow: 0 6px 14px -8px rgb(0 0 0 / 0.7); cursor: pointer; transition: background-color 200ms, transform 200ms; } .ds-foil-plate:hover { background: #edd08a; } .ds-foil-plate:active { transform: translateY(1px); } .ds-foil-plate:focus-visible { outline: 2px solid #edd08a; outline-offset: 3px; } .ds-foil-plate:disabled { background: rgb(216 180 92 / 0.4); color: rgb(27 26 20 / 0.7); box-shadow: none; cursor: not-allowed; }"
+    },
+    {
+      "name": "Foil Line Button",
+      "kind": "button",
+      "refersTo": "button-foil-line",
+      "description": "Secondary action: blind-stamped outline with foil caps and an icon.",
+      "html": "<button class=\"ds-foil-line\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg>Add chapter</button>",
+      "css": ".ds-foil-line { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 16px; background: transparent; border: 1px solid rgb(216 180 92 / 0.4); border-radius: 3px; color: #d8b45c; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer; transition: border-color 200ms, background-color 200ms; } .ds-foil-line:hover { border-color: #d8b45c; background: rgb(0 0 0 / 0.2); } .ds-foil-line:focus-visible { outline: 2px solid #edd08a; outline-offset: 3px; }"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Text and number input with a stamp label: black wash, foil hairline, foil border on focus.",
+      "html": "<label class=\"ds-field-wrap\"><span class=\"ds-stamp-label\">Title</span><input class=\"ds-field\" placeholder=\"The 7 Habits of Highly Effective People\"></label>",
+      "css": ".ds-field-wrap { display: block; } .ds-stamp-label { display: block; margin-bottom: 8px; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(216 180 92 / 0.9); } .ds-field { height: 48px; width: 100%; padding: 0 16px; border: 1px solid rgb(216 180 92 / 0.25); border-radius: 3px; background: rgb(0 0 0 / 0.3); color: #ece6d9; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 16px; transition: border-color 150ms; } .ds-field::placeholder { color: #b8b1a2; } .ds-field:focus { border-color: #d8b45c; outline: none; }"
+    },
+    {
+      "name": "Upright Spine",
+      "kind": "custom",
+      "refersTo": "spine-upright",
+      "description": "A book standing on the shelf in its buckram cloth, with headband, foil rules, vertical title and a hanging ribbon at its reading place.",
+      "html": "<div class=\"ds-shelf\"><div class=\"ds-spine-slot\"><button class=\"ds-spine\" style=\"--cloth:#26365e;--band:#111a30\"><span class=\"ds-headband ds-spine-head\"></span><span class=\"ds-rule\" style=\"margin-top:16px\"></span><span class=\"ds-rule\" style=\"margin-top:4px\"></span><span class=\"ds-spine-title\">7 Habits of Highly Effective People</span><span class=\"ds-rule\" style=\"margin-bottom:4px\"></span><span class=\"ds-rule\" style=\"margin-bottom:12px\"></span><span class=\"ds-spine-count\">2 ch.</span></button><span class=\"ds-ribbon-hang\"><span class=\"ds-ribbon\">1</span></span></div><div class=\"ds-plank\"></div></div>",
+      "css": ".ds-shelf { width: fit-content; padding-top: 12px; } .ds-spine-slot { position: relative; margin: 0 24px; } .ds-spine { position: relative; display: flex; flex-direction: column; align-items: center; width: 84px; height: 300px; padding: 0; border: none; border-radius: 3px 3px 0 0; background-color: var(--cloth); background-image: url('/textures/buckram.png'); background-size: 128px 128px; background-blend-mode: soft-light; box-shadow: 0 10px 18px -10px rgb(0 0 0 / 0.9); cursor: pointer; transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-spine:hover { transform: translateY(-8px); } .ds-spine:focus-visible { outline: 2px solid #edd08a; outline-offset: 3px; } .ds-headband { background-color: var(--band); background-image: linear-gradient(180deg, rgb(255 255 255 / 0.18), transparent 45%, rgb(0 0 0 / 0.3)), repeating-linear-gradient(90deg, #c9a656 0 2px, var(--band) 2px 3px, #8f2f2a 3px 5px, var(--band) 5px 6px); } .ds-spine-head { display: block; height: 8px; width: 100%; border-radius: 3px 3px 0 0; } .ds-rule { display: block; height: 1px; width: 40px; background: rgb(216 180 92 / 0.6); } .ds-spine-title { flex: 1; min-height: 0; margin: 20px 0; overflow: hidden; writing-mode: vertical-rl; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 500; line-height: 1.25; letter-spacing: 0.16em; text-transform: uppercase; color: #d8b45c; } .ds-spine-count { margin-bottom: 16px; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 11px; color: #b8b1a2; } .ds-ribbon-hang { position: absolute; left: 50%; bottom: -32px; z-index: 1; width: 20px; height: 40px; transform: translateX(-50%); } .ds-ribbon { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px; background: #b0322e; color: #ece6d9; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 84%, 0 100%); box-shadow: 0 4px 8px -4px rgb(0 0 0 / 0.6); pointer-events: none; } .ds-plank { height: 16px; min-width: 288px; border-radius: 2px; background: #1a1a1c; box-shadow: 0 14px 24px -12px rgb(0 0 0 / 0.9), inset 0 1px 0 rgb(255 255 255 / 0.06); }"
+    },
+    {
+      "name": "Flat Spine",
+      "kind": "custom",
+      "refersTo": "spine-flat",
+      "description": "Phone shelf: a book lying in the stack, spine facing out, headband and foil rule along its left edge.",
+      "html": "<button class=\"ds-spine-flat\" style=\"--cloth:#7a2e2a;--band:#3b1513\"><span class=\"ds-flat-band\"></span><span class=\"ds-flat-rule\"></span><span class=\"ds-flat-title\">The Psychology of Money</span><span class=\"ds-flat-count\">12 ch.</span></button>",
+      "css": ".ds-spine-flat { position: relative; display: flex; align-items: stretch; gap: 12px; width: 100%; min-height: 64px; padding: 0 16px 0 0; border: none; border-radius: 2px; text-align: left; background-color: var(--cloth); background-image: url('/textures/buckram.png'); background-size: 128px 128px; background-blend-mode: soft-light; box-shadow: 0 6px 12px -8px rgb(0 0 0 / 0.8); cursor: pointer; transition: transform 200ms; } .ds-spine-flat:active { transform: translateX(4px); } .ds-spine-flat:focus-visible { outline: 2px solid #edd08a; outline-offset: 3px; } .ds-flat-band { width: 8px; background-color: var(--band); background-image: linear-gradient(180deg, rgb(255 255 255 / 0.18), transparent 45%, rgb(0 0 0 / 0.3)), repeating-linear-gradient(90deg, #c9a656 0 2px, var(--band) 2px 3px, #8f2f2a 3px 5px, var(--band) 5px 6px); } .ds-flat-rule { width: 1px; background: rgb(216 180 92 / 0.5); } .ds-flat-title { flex: 1; align-self: center; padding: 12px 0; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 500; line-height: 1.375; letter-spacing: 0.16em; text-transform: uppercase; color: #d8b45c; } .ds-flat-count { align-self: center; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 12px; color: #b8b1a2; }"
+    },
+    {
+      "name": "Headband Progress",
+      "kind": "custom",
+      "refersTo": "headband",
+      "description": "Reader progress rule: a faint headband track with a full-strength headband fill that follows scroll.",
+      "html": "<div class=\"ds-progress\" style=\"--band:#111a30\" role=\"progressbar\" aria-valuenow=\"42\"><div class=\"ds-hb ds-hb-track\"></div><div class=\"ds-hb ds-hb-fill\" style=\"width:42%\"></div></div>",
+      "css": ".ds-progress { position: relative; height: 6px; width: 100%; background: rgb(0 0 0 / 0.3); } .ds-hb { background-color: var(--band); background-image: linear-gradient(180deg, rgb(255 255 255 / 0.18), transparent 45%, rgb(0 0 0 / 0.3)), repeating-linear-gradient(90deg, #c9a656 0 2px, var(--band) 2px 3px, #8f2f2a 3px 5px, var(--band) 5px 6px); } .ds-hb-track { height: 100%; opacity: 0.25; } .ds-hb-fill { position: absolute; top: 0; bottom: 0; left: 0; transition: width 100ms ease-out; }"
+    },
+    {
+      "name": "Contents Entry",
+      "kind": "nav",
+      "refersTo": "contents-item-active",
+      "description": "Reader contents rail: idle entries in faded paper, the active entry in foil with a ribbon hanging into its margin.",
+      "html": "<nav class=\"ds-contents\" style=\"--cloth:#26365e\"><span class=\"ds-contents-label\">Contents</span><button class=\"ds-entry ds-entry-active\" aria-current=\"true\"><span class=\"ds-entry-ribbon\"></span><span class=\"ds-entry-num\">1</span>The 7 Habits: An Overview</button><button class=\"ds-entry\"><span class=\"ds-entry-num\">2</span>Be Proactive</button></nav>",
+      "css": ".ds-contents { display: flex; flex-direction: column; gap: 4px; width: 288px; padding: 32px 12px; background-color: var(--cloth); } .ds-contents-label { padding: 0 12px 16px; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(216 180 92 / 0.9); } .ds-entry { position: relative; display: flex; align-items: baseline; gap: 12px; min-height: 44px; padding: 10px 12px 10px 32px; border: none; border-radius: 3px; background: transparent; text-align: left; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 1.375; color: #b8b1a2; cursor: pointer; transition: color 200ms, background-color 200ms; } .ds-entry:hover { background: rgb(0 0 0 / 0.2); color: #ece6d9; } .ds-entry:focus-visible { outline: 2px solid #edd08a; outline-offset: 3px; } .ds-entry-active, .ds-entry-active:hover { color: #d8b45c; background: transparent; } .ds-entry-num { font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0.7; } .ds-entry-ribbon { position: absolute; left: 8px; top: 0; width: 14px; height: 28px; background: #b0322e; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 84%, 0 100%); }"
+    },
+    {
+      "name": "Next Chapter",
+      "kind": "nav",
+      "refersTo": "wayfinding-next",
+      "description": "End-of-chapter wayfinding: a dark-washed control with a tracked caption, the next chapter's name and a foil arrow.",
+      "html": "<button class=\"ds-next\"><span class=\"ds-next-text\"><span class=\"ds-next-cap\">Next chapter</span><span class=\"ds-next-name\">Be Proactive</span></span><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d8b45c\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button>",
+      "css": ".ds-next { display: flex; align-items: center; justify-content: flex-end; gap: 12px; width: 100%; min-height: 56px; padding: 12px 16px; border: none; border-radius: 3px; background: rgb(0 0 0 / 0.25); text-align: right; cursor: pointer; transition: background-color 150ms; } .ds-next:hover { background: rgb(0 0 0 / 0.4); } .ds-next:focus-visible { outline: 2px solid #edd08a; outline-offset: 3px; } .ds-next-text { display: flex; flex-direction: column; min-width: 0; } .ds-next-cap { font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(216 180 92 / 0.9); } .ds-next-name { font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 14px; color: #ece6d9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }"
+    },
+    {
+      "name": "PDF Drop Zone",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "File input in the binding form: dashed foil border that firms on hover and fills faintly while dragging.",
+      "html": "<label class=\"ds-drop\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d8b45c\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z\"/><path d=\"M14 2v4a2 2 0 0 0 2 2h4\"/><path d=\"M12 12v6\"/><path d=\"m15 15-3-3-3 3\"/></svg><span class=\"ds-drop-text\">Drop the PDF here, or choose a file</span><input type=\"file\" accept=\".pdf\" hidden></label>",
+      "css": ".ds-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 176px; padding: 32px 20px; border: 1.5px dashed rgb(216 180 92 / 0.35); border-radius: 3px; text-align: center; cursor: pointer; transition: border-color 150ms, background-color 150ms; } .ds-drop:hover { border-color: rgb(216 180 92 / 0.7); } .ds-drop:focus-within { outline: 2px solid #edd08a; outline-offset: 3px; } .ds-drop-text { margin-top: 12px; font-family: Jost, ui-sans-serif, system-ui, sans-serif; font-size: 16px; color: #b8b1a2; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Library Rebind",
+    "overview": "Every book is a library rebind. The app is both bindery and shelf: each title gets its own buckram cloth and gold-foil spine, and reading happens inside that binding. Cloth with a fine woven tile owns whole regions of the screen: near-black for the app itself, and one of six per-book cloths for each title. Titles, actions and section marks are stamped in flat gold foil, set in widely tracked Jost capitals. The reading page is a pure black ground carrying warm-white Literata at a fixed 66ch measure.\n\nThe system is dark, quiet and material. Depth comes from cloth against page tone and from soft, low drop shadows, never from glass, blur or gradients across surfaces. State is expressed as a physical mark rather than a hue change: a red silk ribbon marks where the reader stopped, and a two-colour headband stripe is the progress rule. Density is low on the reader and moderate on the binding form; touch targets never drop below 44px.\n\nThe world rejects the category default for AI reading tools: dark slate, purple-blue gradients, glass cards, and \"AI-generated\" labels.",
+    "keyCharacteristics": [
+      "Buckram cloth fields (raster weave tile, soft-light blend over a flat colour) own whole regions.",
+      "Six per-book cloths, each with its own dark band colour, assigned deterministically from the book's name.",
+      "Flat gold foil for stamped titles, the primary action, rules and focus.",
+      "Two hands: tracked Jost caps for anything stamped or operated, Literata for anything read.",
+      "Ribbon marks the reading place; headband stripe shows progress and waiting.",
+      "Fixed 66ch reading measure; margins give, the measure holds."
+    ],
+    "rules": [
+      { "name": "The Cloth Owns the Field Rule", "body": "Colour commits as unbroken cloth across whole regions: the screen, a spine, the reader frame. Never place cloth colours as accents on a neutral ground, and never introduce a light surface.", "section": "colors" },
+      { "name": "The Stamped Gold Rule", "body": "Gold is foil: it appears as stamped type, hairline rules, outlines, icon strokes, and the single foil-plate fill per form. It is never a background wash or a gradient.", "section": "colors" },
+      { "name": "The Ribbon Is a Mark Rule", "body": "Ribbon red marks the reading place and nothing else. Errors use Error Rose text; buttons and links never turn red.", "section": "colors" },
+      { "name": "The Two Hands Rule", "body": "Jost caps are the binder's stamp: titles, labels, controls, counts. Literata is the reader's page: chapter text, subheads, the tagline, empty-state and explanatory sentences. Never set reading text in Jost or a control in Literata.", "section": "typography" },
+      { "name": "The Fixed Measure Rule", "body": "The reading column is 66ch at every width; only its side padding (20px phone, 32px from sm) and top spacing change.", "section": "typography" },
+      { "name": "The Dim Bindery Rule", "body": "Shadows only fall downward or inward, soft and tight to the object. Depth otherwise comes from cloth versus page tone and black washes, never from blur or translucent glass.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do bind every book in exactly one of the six cloths, chosen from its title, and set its `--cloth` and `--band` together on the book's root.",
+      "Do lay the buckram tile (128px, soft-light blend) over any cloth region, including spines and the reader frame.",
+      "Do keep reading text in Literata at 66ch, line-height 1.75, paper at 90% on the cloth-tinted page ground.",
+      "Do use tracked Jost caps (0.14–0.22em) in foil for titles, labels and controls.",
+      "Do show reading place with the ribbon and progress or waiting with the headband stripe.",
+      "Do keep every touch target at least 44px and every input at 16px or larger."
+    ],
+    "donts": [
+      "Don't use dark slate, purple-blue gradients, or glass cards; the only gradients in the system are the headband's threads and sheen.",
+      "Don't introduce light or white surfaces; the page is always the cloth in shadow.",
+      "Don't use ribbon red for errors, buttons, or decoration.",
+      "Don't fill large areas with gold or use more than one foil plate in a view.",
+      "Don't add \"AI-generated\" labels, invented covers, stats, or badges to books.",
+      "Don't let the reading measure grow with the viewport; widen the margins instead."
+    ]
+  }
+}

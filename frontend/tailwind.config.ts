@@ -1,84 +1,31 @@
-
 import type { Config } from "tailwindcss";
 
 export default {
-  darkMode: ["class"],
-  content: [
-    "./pages/**/*.{ts,tsx}",
-    "./components/**/*.{ts,tsx}",
-    "./app/**/*.{ts,tsx}",
-    "./src/**/*.{ts,tsx}",
-  ],
-  prefix: "",
+  content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
-    container: {
-      center: true,
-      padding: "2rem",
-      screens: {
-        "2xl": "1400px",
-      },
-    },
     extend: {
       fontFamily: {
-        inter: ['Inter', 'sans-serif'],
+        stamp: ['"Jost"', "ui-sans-serif", "system-ui", "sans-serif"],
+        read: ['"Literata"', "Georgia", "serif"],
       },
       colors: {
-        primary: {
-          DEFAULT: "#4F46E5",
-          light: "#6366F1",
-          dark: "#4338CA",
-          contrast: "#F4F4FF",
+        library: "#0B0B0C",
+        "library-deep": "#1A1A1C",
+        foil: {
+          DEFAULT: "#D8B45C",
+          bright: "#EDD08A",
+          deep: "#A9873A",
+          ink: "#1B1A14",
         },
-        background: {
-          DEFAULT: "#0F172A",
-          light: "#1E293B",
-          card: "#1A1E2D",
+        paper: {
+          DEFAULT: "#ECE6D9",
+          muted: "#B8B1A2",
         },
-        accent: {
-          blue: "#38BDF8",
-          cyan: "#22D3EE",
-          green: "#10B981",
-          magenta: "#D946EF",
-        },
-        cta: {
-          DEFAULT: "#6366F1",
-          hover: "#4F46E5",
-          active: "#4338CA",
-          text: "#F4F4FF",
-        },
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        foreground: "hsl(var(--foreground))",
+        ribbon: "#B0322E",
+        error: "#F0A39A",
       },
-      borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
-      },
-      keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: "0" },
-        },
-        fadeIn: {
-          from: { opacity: "0" },
-          to: { opacity: "1" },
-        },
-        slideUp: {
-          from: { transform: "translateY(10px)", opacity: "0" },
-          to: { transform: "translateY(0)", opacity: "1" },
-        },
-      },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        fadeIn: "fadeIn 0.5s ease-out",
-        slideUp: "slideUp 0.5s ease-out",
+      transitionTimingFunction: {
+        "out-expo": "cubic-bezier(0.16, 1, 0.3, 1)",
       },
     },
   },

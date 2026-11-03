@@ -1,0 +1,14 @@
+[Unit]
+Description=Smartbook Summaries API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/smartbook-summaries/backend
+Environment=DATA_DIR=/root/smartbook-summaries/data
+ExecStart=/root/smartbook-summaries/backend/.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8082
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

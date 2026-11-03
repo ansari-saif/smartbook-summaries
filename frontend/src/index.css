@@ -1,52 +1,115 @@
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
- 
+
 @layer base {
   :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-    --radius: 0.5rem;
+    --cloth: #0b0b0c;
+    --band: #050505;
+    color-scheme: dark;
   }
-}
 
-@layer base {
-  * {
-    @apply border-border;
-  }
+  html,
   body {
-    @apply bg-background text-foreground font-inter antialiased;
+    @apply bg-library font-stamp text-paper antialiased;
+  }
+
+  ::selection {
+    background: rgb(216 180 92 / 0.85);
+    color: #1b1a14;
+  }
+
+  :focus-visible {
+    outline: 2px solid #edd08a;
+    outline-offset: 3px;
+  }
+
+  * {
+    scrollbar-color: rgb(216 180 92 / 0.35) transparent;
   }
 }
 
-.glass-panel {
-  @apply bg-background-card/30 backdrop-blur-lg border border-white/10 rounded-lg;
+@layer components {
+  /* Buckram: a neutral woven tile laid over the book's own colour. */
+  .cloth {
+    background-color: var(--cloth);
+    background-image: url("/textures/buckram.png");
+    background-size: 128px 128px;
+    background-blend-mode: soft-light;
+  }
+
+  .page-ground {
+    background-color: #000;
+  }
+
+  .foil {
+    @apply font-stamp uppercase text-foil;
+    letter-spacing: 0.16em;
+  }
+
+  /* Silk headband: alternating twisted threads, foil and the cloth's dark. */
+  .headband {
+    background-color: var(--band);
+    background-image:
+      linear-gradient(180deg, rgb(255 255 255 / 0.18), transparent 45%, rgb(0 0 0 / 0.3)),
+      repeating-linear-gradient(90deg, #c9a656 0 2px, var(--band) 2px 3px, #8f2f2a 3px 5px, var(--band) 5px 6px);
+  }
+
+  .foil-plate {
+    @apply inline-flex items-center justify-center gap-2 rounded-[3px] bg-foil font-stamp text-sm font-semibold uppercase text-foil-ink transition-[background-color,transform] duration-200;
+    letter-spacing: 0.14em;
+    box-shadow: 0 6px 14px -8px rgb(0 0 0 / 0.7);
+  }
+  .foil-plate:hover {
+    @apply bg-foil-bright;
+  }
+  .foil-plate:active {
+    transform: translateY(1px);
+  }
+  .foil-plate:disabled {
+    @apply cursor-not-allowed bg-foil/40 text-foil-ink/70;
+    box-shadow: none;
+  }
+
+  .foil-line {
+    @apply inline-flex items-center justify-center gap-2 rounded-[3px] border border-foil/40 font-stamp text-xs font-medium uppercase text-foil transition-colors duration-200 hover:border-foil hover:bg-black/20;
+    letter-spacing: 0.14em;
+  }
+
+  .field {
+    @apply h-12 w-full rounded-[3px] border border-foil/25 bg-black/30 px-4 font-stamp text-base text-paper placeholder:text-paper-muted transition-colors focus:border-foil focus:outline-none sm:h-11;
+  }
+
+  .stamp-label {
+    @apply font-stamp text-xs font-medium uppercase text-foil/90;
+    letter-spacing: 0.14em;
+  }
 }
 
-.button-gradient {
-  @apply bg-gradient-to-r from-primary to-accent-blue hover:from-primary-dark hover:to-accent-cyan transition-all duration-300;
+@keyframes band-run {
+  to {
+    background-position: 0 0, 24px 0;
+  }
 }
 
-.animate-in {
-  animation: fadeIn 0.5s ease-out;
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.band-run {
+  animation: band-run 0.9s linear infinite;
+}
+
+.page-in {
+  animation: page-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .band-run,
+  .page-in {
+    animation: none;
+  }
 }
