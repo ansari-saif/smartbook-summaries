@@ -56,7 +56,7 @@ def test_read_contents_finds_a_heading_split_across_lines():
         ]
     )
     result = service.read_contents(pdf, 1)
-    assert result["chapters"] == [{"title": "Habit 1: Be Proactive", "page": 3}]
+    assert result["chapters"] == [{"title": "Habit 1: Be Proactive", "page": 3, "end": 3}]
 
 
 def test_read_contents_uses_a_printed_page_when_the_title_is_not_in_the_body():
@@ -67,7 +67,7 @@ def test_read_contents_uses_a_printed_page_when_the_title_is_not_in_the_body():
         ]
     )
     result = service.read_contents(pdf, 1)
-    assert result["chapters"] == [{"title": "Appendix", "page": 4}]
+    assert result["chapters"] == [{"title": "Appendix", "page": 4, "end": 4}]
 
 
 def test_read_contents_matches_outline_across_dash_characters():
@@ -76,7 +76,7 @@ def test_read_contents_matches_outline_across_dash_characters():
         outline=[[1, "The 7 Habits-An Overview", 2]],
     )
     result = service.read_contents(pdf, 1)
-    assert result["chapters"] == [{"title": "The 7 Habits\u2014An Overview", "page": 2}]
+    assert result["chapters"] == [{"title": "The 7 Habits\u2014An Overview", "page": 2, "end": 2}]
     assert result["page_count"] == 2
 
 
@@ -89,31 +89,48 @@ def test_read_contents_rejects_a_page_past_the_end():
         assert "past the end" in str(exc)
 
 
-def test_slice_chapters_stops_before_the_next_start_page():
+def test_read_contents_sets_a_shared_page_as_from_and_to():
+    pdf = _pdf_with_pages(
+        ["CONTENTS\nHabit 7\nPrinciples", "Earlier page.", "HABIT 7:\nSHARPEN\nPrinciples of renewal."],
+        outline=[[1, "Habit 7", 3], [1, "Principles", 3]],
+    )
+    result = service.read_contents(pdf, 1)
+    assert result["chapters"] == [
+        {"title": "Habit 7", "page": 3, "end": 3},
+        {"title": "Principles", "page": 3, "end": 3},
+    ]
+
+
+def test_slice_chapters_stops_at_the_given_end_page():
     pdf = _pdf_with_pages(
         [
             "one",
             "HABIT 1:\nBE PROACTIVE",
             "still habit",
+            "skipped page",
             "HABIT 2:\nBEGIN",
         ]
     )
     sliced = service.slice_chapters(
         pdf,
-        [{"title": "Habit 1", "page": 2}, {"title": "Habit 2", "page": 4}],
+        [
+            {"title": "Habit 1", "page": 2, "end": 3},
+            {"title": "Habit 2", "page": 5, "end": 5},
+        ],
     )
     assert "BE PROACTIVE" in sliced["Habit 1"]
     assert "still habit" in sliced["Habit 1"]
+    assert "skipped page" not in sliced["Habit 1"]
     assert "BEGIN" not in sliced["Habit 1"]
     assert "BEGIN" in sliced["Habit 2"]
-    assert "BE PROACTIVE" not in sliced["Habit 2"]
+    assert "skipped page" not in sliced["Habit 2"]
 
 
 def test_slice_chapters_keeps_a_shared_page():
     pdf = _pdf_with_pages(["shared page text"])
     sliced = service.slice_chapters(
         pdf,
-        [{"title": "A", "page": 1}, {"title": "B", "page": 1}],
+        [{"title": "A", "page": 1, "end": 1}, {"title": "B", "page": 1, "end": 1}],
     )
     assert "shared page text" in sliced["A"]
     assert "shared page text" in sliced["B"]

@@ -325,7 +325,8 @@ def read_contents(pdf_content: bytes, contents_page: int) -> dict:
                 page = _find_title_page(doc, folded, last_index + 1)
             if page is None:
                 page = printed
-            chapters.append({"title": title, "page": page})
+            chapters.append({"title": title, "page": page, "end": None})
+        _assign_ends(chapters, doc.page_count)
         logger.info(
             "Contents page {} yielded {} titles (pdf has {} pages)",
             contents_page,
@@ -337,23 +338,36 @@ def read_contents(pdf_content: bytes, contents_page: int) -> dict:
         doc.close()
 
 
+def _assign_ends(chapters: list[dict], page_count: int) -> None:
+    """To is the page before the next known start, or the last PDF page."""
+    for index, chapter in enumerate(chapters):
+        start = chapter["page"]
+        if start is None:
+            chapter["end"] = None
+            continue
+        end = page_count
+        for later in chapters[index + 1 :]:
+            if later["page"] is not None:
+                end = later["page"] - 1
+                break
+        if end < start:
+            end = start
+        chapter["end"] = end
+
+
 def slice_chapters(pdf_content: bytes, chapters: list[dict]) -> dict[str, str]:
-    """Each chapter runs from its page through the page before the next one."""
+    """Each chapter runs from its From page through its To page."""
     doc = _open_pdf(pdf_content)
     try:
         page_count = doc.page_count
         sliced: dict[str, str] = {}
-        for index, chapter in enumerate(chapters):
+        for chapter in chapters:
             start = chapter["page"]
-            if index + 1 < len(chapters):
-                end = chapters[index + 1]["page"] - 1
-            else:
-                end = page_count
-            if end < start:
-                end = start
-            if start < 1 or start > page_count:
-                raise ValueError(f"Chapter {chapter['title']!r} starts on page {start}, but the PDF has {page_count} pages")
-            end = min(end, page_count)
+            end = chapter["end"]
+            if start < 1 or end < start or end > page_count:
+                raise ValueError(
+                    f"Chapter {chapter['title']!r} pages {start}-{end} are outside the PDF ({page_count} pages)"
+                )
             text = ""
             for page in doc[start - 1 : end]:
                 text += page.get_text("text")

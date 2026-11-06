@@ -53,25 +53,28 @@ def _parse_chapters(raw: str, page_count: int) -> list[dict]:
     except json.JSONDecodeError:
         raise ValueError("Invalid JSON format for chapters")
     if not isinstance(parsed, list) or not parsed:
-        raise ValueError("chapters must be a list of {title, page}")
+        raise ValueError("chapters must be a list of {title, page, end}")
     chapters = []
     previous = 0
     for item in parsed:
         if not isinstance(item, dict):
-            raise ValueError("chapters must be a list of {title, page}")
+            raise ValueError("chapters must be a list of {title, page, end}")
         title = item.get("title")
         page = item.get("page")
+        end = item.get("end")
         if not isinstance(title, str) or not title.strip():
             raise ValueError("each chapter needs a title")
         if isinstance(page, bool) or not isinstance(page, int):
             raise ValueError("each chapter needs an integer page")
-        if page < 1 or page > page_count:
-            raise ValueError(f"page {page} is outside the PDF ({page_count} pages)")
+        if isinstance(end, bool) or not isinstance(end, int):
+            raise ValueError("each chapter needs an integer end page")
+        if page < 1 or end < page or end > page_count:
+            raise ValueError(f"pages {page}-{end} are outside the PDF ({page_count} pages)")
         if page < previous:
             raise ValueError("chapter pages must be in order")
         title = title.strip()
         chapter_pdf_filename(title)
-        chapters.append({"title": title, "page": page})
+        chapters.append({"title": title, "page": page, "end": end})
         previous = page
     return chapters
 

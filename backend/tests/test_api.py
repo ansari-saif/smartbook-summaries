@@ -69,8 +69,13 @@ def _parse_sse(body: str) -> list[dict]:
     return events
 
 
-def _chapters(*pairs: tuple[str, int]) -> str:
-    return json.dumps([{"title": title, "page": page} for title, page in pairs])
+def _chapters(*pairs: tuple) -> str:
+    chapters = []
+    for pair in pairs:
+        title, page = pair[0], pair[1]
+        end = pair[2] if len(pair) > 2 else page
+        chapters.append({"title": title, "page": page, "end": end})
+    return json.dumps(chapters)
 
 
 def _pdf_bytes() -> bytes:
@@ -290,8 +295,8 @@ def test_contents_uses_outline_pages_for_split_headings():
     body = response.json()
     assert body["page_count"] == 3
     assert body["chapters"] == [
-        {"title": "Overview", "page": 2},
-        {"title": "Habit 1: Be Proactive", "page": 3},
+        {"title": "Overview", "page": 2, "end": 2},
+        {"title": "Habit 1: Be Proactive", "page": 3, "end": 3},
     ]
 
 

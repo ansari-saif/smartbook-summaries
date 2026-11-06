@@ -73,10 +73,11 @@ function formatSize(bytes: number) {
 interface ChapterDraft {
   title: string;
   page: string;
+  end: string;
 }
 
 function emptyChapter(): ChapterDraft {
-  return { title: '', page: '' };
+  return { title: '', page: '', end: '' };
 }
 
 const Index = () => {
@@ -85,7 +86,6 @@ const Index = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [bookName, setBookName] = useState('');
   const [contentsPage, setContentsPage] = useState('');
-  const [pageCount, setPageCount] = useState<number | null>(null);
   const [readingContents, setReadingContents] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -169,7 +169,6 @@ const Index = () => {
       setChapters([emptyChapter()]);
       setBookName('');
       setContentsPage('');
-      setPageCount(null);
     } else if (status === 'failed') {
       setFormError(error || 'Binding failed.');
     }
@@ -332,7 +331,6 @@ const Index = () => {
     setBookName(file.name.replace(/\.pdf$/i, ''));
     setChapters([emptyChapter()]);
     setContentsPage('');
-    setPageCount(null);
     setFormError('');
   };
 
@@ -350,24 +348,18 @@ const Index = () => {
   const updateChapter = (index: number, patch: Partial<ChapterDraft>) =>
     setChapters((prev) => prev.map((chapter, i) => (i === index ? { ...chapter, ...patch } : chapter)));
 
-  const chapterEnd = (index: number) => {
-    const current = Number(chapters[index].page);
-    if (!Number.isInteger(current) || current < 1) return null;
-    for (let next = index + 1; next < chapters.length; next += 1) {
-      const start = Number(chapters[next].page);
-      if (Number.isInteger(start) && start >= 1) return Math.max(current, start - 1);
-    }
-    return pageCount ? Math.max(current, pageCount) : null;
-  };
-
-  const filled = chapters.filter((chapter) => chapter.title.trim() || chapter.page.trim());
+  const filled = chapters.filter((chapter) => chapter.title.trim() || chapter.page.trim() || chapter.end.trim());
   const numbered = filled
     .map((chapter) => Number(chapter.page))
     .filter((page) => Number.isInteger(page) && page >= 1);
   const pagesInOrder = numbered.every((page, index) => index === 0 || page >= numbered[index - 1]);
   const chaptersReady =
     filled.length > 0 &&
-    filled.every((chapter) => chapter.title.trim() && Number(chapter.page) >= 1) &&
+    filled.every((chapter) => {
+      const from = Number(chapter.page);
+      const to = Number(chapter.end);
+      return chapter.title.trim() && Number.isInteger(from) && Number.isInteger(to) && from >= 1 && to >= from;
+    }) &&
     pagesInOrder;
   const contentsValid = Number(contentsPage) >= 1;
   const ready = !!selectedFile && !!bookName.trim() && chaptersReady && !readingContents;
@@ -386,11 +378,11 @@ const Index = () => {
         const detail = typeof data.detail === 'string' ? data.detail : `Could not read the contents (${response.status})`;
         throw new Error(detail);
       }
-      setPageCount(typeof data.page_count === 'number' ? data.page_count : null);
       setChapters(
-        data.chapters.map((chapter: { title?: string; page?: number | null }) => ({
+        data.chapters.map((chapter: { title?: string; page?: number | null; end?: number | null }) => ({
           title: chapter.title ?? '',
           page: chapter.page == null ? '' : String(chapter.page),
+          end: chapter.end == null ? '' : String(chapter.end),
         })),
       );
     } catch (error) {
@@ -413,7 +405,13 @@ const Index = () => {
     formData.append('pdf_file', selectedFile);
     formData.append(
       'chapters',
-      JSON.stringify(filled.map((chapter) => ({ title: chapter.title.trim(), page: Number(chapter.page) }))),
+      JSON.stringify(
+        filled.map((chapter) => ({
+          title: chapter.title.trim(),
+          page: Number(chapter.page),
+          end: Number(chapter.end),
+        })),
+      ),
     );
     formData.append('book_name', bookName.trim());
 
@@ -596,14 +594,13 @@ const Index = () => {
             <fieldset className="md:col-span-2">
               <legend className="stamp-label mb-1">Chapters</legend>
               <p className="mb-3 font-stamp text-sm text-paper-muted">
-                Each row is a chapter and the PDF page where it starts. Remove any you do not want bound.
+                Each row is a chapter with the PDF pages it covers. Remove any you do not want bound.
               </p>
               {filled.length > 1 && !pagesInOrder && (
                 <p className="mb-3 font-stamp text-sm text-error">Chapter pages have to stay in order.</p>
               )}
               <ol className="space-y-2">
                 {chapters.map((chapter, index) => {
-                  const end = chapterEnd(index);
                   return (
                     <li key={index} className="flex items-center gap-2">
                       <span className="w-6 shrink-0 text-right font-stamp text-sm tabular-nums text-foil/80">
@@ -622,15 +619,20 @@ const Index = () => {
                         min="1"
                         value={chapter.page}
                         onChange={(e) => updateChapter(index, { page: e.target.value })}
-                        placeholder="Page"
-                        aria-label={`Chapter ${index + 1} page`}
+                        placeholder="From"
+                        aria-label={`Chapter ${index + 1} from`}
                         className="field w-20 shrink-0 tabular-nums"
                       />
-                      {end != null && (
-                        <span className="hidden w-14 shrink-0 font-stamp text-sm tabular-nums text-paper-muted sm:inline">
-                          – {end}
-                        </span>
-                      )}
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min="1"
+                        value={chapter.end}
+                        onChange={(e) => updateChapter(index, { end: e.target.value })}
+                        placeholder="To"
+                        aria-label={`Chapter ${index + 1} to`}
+                        className="field w-20 shrink-0 tabular-nums"
+                      />
                       <button
                         type="button"
                         onClick={() => setChapters((prev) => prev.filter((_, i) => i !== index))}
