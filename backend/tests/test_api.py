@@ -289,6 +289,41 @@ def test_process_pdf_job_fails_when_no_chapter_matches(tmp_path, monkeypatch):
     assert "No chapters matched" in job["error"]
 
 
+def test_eta_seed_then_measured_average():
+    assert jobs.eta_seconds(18, 0, 0, 0) == 180
+    assert jobs.eta_seconds(4, 1, 1, 30) == 90
+    assert jobs.eta_seconds(6, 1, 1, 30) == 150
+
+
+def test_progress_event_and_job_payload(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    def fake(*_args):
+        jobs.add_steps(4)
+        jobs.record_step(30)
+
+    monkeypatch.setattr(main, "process_init", fake)
+    response = client.post(
+        "/process-pdf",
+        data={
+            "search_strings": '["Chapter 1"]',
+            "start": "1",
+            "end": "1",
+            "book_name": "Demo Book",
+        },
+        files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
+    )
+    assert response.status_code == 202, response.text
+    job = _wait_for_job(response.json()["job_id"])
+    assert job["status"] == "succeeded"
+    assert job["progress"] == {"done": 1, "total": 4, "eta_seconds": 90}
+
+    events = _parse_sse(client.get(f"/jobs/{job['job_id']}/events").text)
+    progress = [event["data"] for event in events if event["event"] == "progress"]
+    assert progress[-1] == job["progress"]
+    assert events[-1]["event"] == "status"
+
+
 def test_sse_omits_debug_logs(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
 

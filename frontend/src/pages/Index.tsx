@@ -27,6 +27,7 @@ interface JobSummary {
   book_name: string;
   status: JobStatus;
   error: string | null;
+  progress?: JobProgress | null;
 }
 
 function readActiveJob(): string | null {
@@ -44,6 +45,18 @@ function writeActiveJob(jobId: string | null) {
   } catch {
     // Storage can be blocked; the jobs list still rediscovers a running job.
   }
+}
+
+interface JobProgress {
+  done: number;
+  total: number;
+  eta_seconds: number;
+}
+
+function formatEta(seconds: number) {
+  if (seconds < 60) return 'Less than a minute left';
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return `About ${minutes} min left`;
 }
 
 function levelClass(level: string) {
@@ -71,6 +84,7 @@ const Index = () => {
   const [shelfError, setShelfError] = useState('');
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [jobLogs, setJobLogs] = useState<JobLogLine[]>([]);
+  const [jobProgress, setJobProgress] = useState<JobProgress | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [recentJobs, setRecentJobs] = useState<JobSummary[]>([]);
   const navigate = useNavigate();
@@ -136,6 +150,7 @@ const Index = () => {
     stopWatching();
     setJobStatus(status);
     setIsSubmitting(false);
+    setJobProgress(null);
     writeActiveJob(null);
     if (status === 'succeeded') {
       setFormError('');
@@ -164,6 +179,7 @@ const Index = () => {
         const data = (await response.json()) as JobSummary;
         if (watchGen.current !== gen) return;
         setJobStatus(data.status);
+        if (data.progress) setJobProgress(data.progress);
         if (data.status === 'succeeded' || data.status === 'failed') {
           await finishJob(gen, data.status, data.error);
         }
@@ -185,6 +201,7 @@ const Index = () => {
     setIsSubmitting(true);
     setFormError('');
     setJobLogs([]);
+    setJobProgress(null);
     writeActiveJob(jobId);
 
     let errors = 0;
@@ -199,6 +216,16 @@ const Index = () => {
         setJobStatus('running');
       } catch {
         // Ignore a malformed log event and keep the stream.
+      }
+    });
+
+    source.addEventListener('progress', (event) => {
+      if (watchGen.current !== gen) return;
+      errors = 0;
+      try {
+        setJobProgress(JSON.parse((event as MessageEvent).data) as JobProgress);
+      } catch {
+        // Ignore a malformed progress event and keep the stream.
       }
     });
 
@@ -566,6 +593,11 @@ const Index = () => {
                         ? 'Binding finished.'
                         : 'Binding stopped.'}
                   </p>
+                  {isSubmitting && jobProgress && jobProgress.total > 0 && (
+                    <p className="mt-1 font-stamp text-sm text-paper">
+                      {formatEta(jobProgress.eta_seconds)} · {jobProgress.done} of {jobProgress.total}
+                    </p>
+                  )}
                   {jobLogs.length > 0 && (
                     <div
                       ref={logBoxRef}

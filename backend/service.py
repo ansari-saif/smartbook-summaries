@@ -13,6 +13,8 @@ from openai import OpenAI
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
+import jobs
+
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
@@ -136,21 +138,25 @@ def _chat(system: str, prompt: str, max_tokens: int = MAX_OUTPUT_TOKENS) -> str:
         estimate_tokens(prompt),
         max_tokens,
     )
-    response = _client().chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0,
-        max_tokens=max_tokens,
-        extra_body={"reasoning": {"enabled": False}},
-    )
-    content = response.choices[0].message.content
-    if not content:
-        logger.error("OpenRouter returned empty content (model={})", model)
-        raise RuntimeError("model returned an empty response")
-    return content.strip().strip("```json").strip("```")
+    started = time.perf_counter()
+    try:
+        response = _client().chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0,
+            max_tokens=max_tokens,
+            extra_body={"reasoning": {"enabled": False}},
+        )
+        content = response.choices[0].message.content
+        if not content:
+            logger.error("OpenRouter returned empty content (model={})", model)
+            raise RuntimeError("model returned an empty response")
+        return content.strip().strip("```json").strip("```")
+    finally:
+        jobs.record_step(time.perf_counter() - started)
 
 
 def get_ai_response(prompt):
@@ -174,6 +180,7 @@ def _summarize_long_text(text: str) -> str:
     total_tokens = estimate_tokens(text)
     if len(parts) == 1:
         logger.info("Summary single pass (~{} tokens)", total_tokens)
+        jobs.add_steps(1)
         return _chat(SUMMARY_SYSTEM, parts[0], max_tokens=1024)
 
     logger.info(
@@ -182,6 +189,7 @@ def _summarize_long_text(text: str) -> str:
         MAX_SUMMARY_INPUT_TOKENS,
         len(parts),
     )
+    jobs.add_steps(len(parts))
     partials = []
     for index, part in enumerate(parts, start=1):
         logger.info(
@@ -198,6 +206,7 @@ def _summarize_long_text(text: str) -> str:
         return _summarize_long_text(combined)
 
     logger.info("Summary reduce pass (~{} tokens)", estimate_tokens(combined))
+    jobs.add_steps(1)
     return _chat(
         SUMMARY_SYSTEM,
         "Combine these section summaries into one short overall summary:\n\n" + combined,
@@ -344,6 +353,7 @@ def process_init(pdf_content, book_name, strings_to_search, start, end):
         chunks = merge_paragraphs(paragraphs)
         total_chunks = len(chunks)
         logger.info("Chapter={!r} split into {} chunks", key, total_chunks)
+        jobs.add_steps(total_chunks)
         results = []
         for index, para in enumerate(chunks, start=1):
             logger.info(

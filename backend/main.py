@@ -107,7 +107,7 @@ async def process_pdf(
 async def _run_job(job, pdf_content, book_name, strings_to_search, start, end):
     jobs.mark_running(job)
     try:
-        with logger.contextualize(job_id=job.id):
+        with jobs.bind_job(job.id), logger.contextualize(job_id=job.id):
             await asyncio.to_thread(
                 process_init, pdf_content, book_name, strings_to_search, start, end
             )

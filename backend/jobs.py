@@ -8,10 +8,12 @@ that viewer and leaves the job running.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import time
 import traceback
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -22,8 +24,12 @@ FINISHED_TTL_SECONDS = 3600
 MAX_FINISHED_JOBS = 50
 MAX_HISTORY = 1000
 HEARTBEAT_SECONDS = 15
+INITIAL_AVG_CALL_SECONDS = 10
 
 _jobs: dict[str, "Job"] = {}
+_current_job_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "smartbook_job_id", default=None
+)
 _tasks: set[asyncio.Task] = set()
 _loop: asyncio.AbstractEventLoop | None = None
 _sink_id: int | None = None
@@ -46,6 +52,24 @@ class Job:
     next_seq: int = 1
     history: list[dict] = field(default_factory=list)
     subscribers: list[asyncio.Queue] = field(default_factory=list)
+    steps_done: int = 0
+    steps_total: int = 0
+    sample_count: int = 0
+    sample_seconds: float = 0.0
+
+    def progress_dict(self) -> dict | None:
+        if self.steps_total <= 0 and self.steps_done <= 0:
+            return None
+        return {
+            "done": self.steps_done,
+            "total": self.steps_total,
+            "eta_seconds": eta_seconds(
+                self.steps_total,
+                self.steps_done,
+                self.sample_count,
+                self.sample_seconds,
+            ),
+        }
 
     def to_dict(self) -> dict:
         return {
@@ -55,7 +79,46 @@ class Job:
             "error": self.error,
             "created_at": self.created_at,
             "finished_at": self.finished_at,
+            "progress": self.progress_dict(),
         }
+
+
+def eta_seconds(total: int, done: int, sample_count: int, sample_seconds: float) -> int:
+    """Remaining seconds. Before any finished call, each step is assumed to take 10s."""
+    remaining = max(0, total - done)
+    if sample_count > 0:
+        average = sample_seconds / sample_count
+    else:
+        average = INITIAL_AVG_CALL_SECONDS
+    return int(round(average * remaining))
+
+
+@contextmanager
+def bind_job(job_id: str):
+    """Mark the job whose model calls should update the time estimate."""
+    token = _current_job_id.set(job_id)
+    try:
+        yield
+    finally:
+        _current_job_id.reset(token)
+
+
+def add_steps(count: int) -> None:
+    """Count model calls that are now known. No-op outside a job."""
+    if count <= 0:
+        return
+    job_id = _current_job_id.get()
+    if not job_id:
+        return
+    _schedule(lambda: _add_steps(job_id, count))
+
+
+def record_step(seconds: float) -> None:
+    """One finished model call. No-op outside a job."""
+    job_id = _current_job_id.get()
+    if not job_id:
+        return
+    _schedule(lambda: _record_step(job_id, seconds))
 
 
 def bind_loop(loop: asyncio.AbstractEventLoop | None = None) -> None:
@@ -182,6 +245,10 @@ async def iter_job_events(job: Job, last_event_id: int):
                 if chunk:
                     yield chunk
 
+        progress = _sse_progress(job)
+        if progress:
+            yield progress
+
         if job.status in TERMINAL:
             yield _sse_status(job)
             return
@@ -192,6 +259,9 @@ async def iter_job_events(job: Job, last_event_id: int):
             except asyncio.TimeoutError:
                 yield ": ping\n\n"
                 if job.status in TERMINAL:
+                    progress = _sse_progress(job)
+                    if progress:
+                        yield progress
                     yield _sse_status(job)
                     return
                 continue
@@ -199,7 +269,12 @@ async def iter_job_events(job: Job, last_event_id: int):
                 chunk = emit_log(item)
                 if chunk:
                     yield chunk
+            elif item["type"] == "progress":
+                yield _sse("progress", _progress_payload(item))
             elif item["type"] == "status":
+                progress = _sse_progress(job)
+                if progress:
+                    yield progress
                 yield _sse_status(job)
                 return
     finally:
@@ -227,6 +302,66 @@ def _prune() -> None:
     overflow = len(finished) - MAX_FINISHED_JOBS
     for job in finished[: max(0, overflow)]:
         _jobs.pop(job.id, None)
+
+
+def _schedule(callback) -> None:
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if running is _loop:
+        callback()
+        return
+    if _loop is None:
+        return
+    try:
+        _loop.call_soon_threadsafe(callback)
+    except RuntimeError:
+        return
+
+
+def _add_steps(job_id: str, count: int) -> None:
+    job = _jobs.get(job_id)
+    if job is None:
+        return
+    job.steps_total += count
+    _fanout_progress(job)
+
+
+def _record_step(job_id: str, seconds: float) -> None:
+    job = _jobs.get(job_id)
+    if job is None:
+        return
+    job.steps_done += 1
+    job.sample_count += 1
+    job.sample_seconds += max(0.0, seconds)
+    if job.steps_done > job.steps_total:
+        job.steps_total = job.steps_done
+    _fanout_progress(job)
+
+
+def _progress_payload(item: dict) -> dict:
+    return {
+        "done": item["done"],
+        "total": item["total"],
+        "eta_seconds": item["eta_seconds"],
+    }
+
+
+def _fanout_progress(job: Job) -> None:
+    progress = job.progress_dict()
+    if progress is None:
+        return
+    item = {"type": "progress", **progress}
+    for subscriber in list(job.subscribers):
+        subscriber.put_nowait(item)
+
+
+def _sse_progress(job: Job) -> str | None:
+    progress = job.progress_dict()
+    if progress is None:
+        return None
+    return _sse("progress", progress)
 
 
 def _fanout_status(job: Job) -> None:
