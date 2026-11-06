@@ -14,8 +14,9 @@ Smartbook Summaries turns a PDF into chapter-level plain-English rewrites and sh
 ## Flow
 
 1. User uploads a PDF, names chapters, and sets a page range on the home page.
-2. `POST /process-pdf` extracts text for that range, splits on chapter titles, rewrites via OpenRouter, and stores results under `backend/data/`.
-3. The summary page loads `GET /book-details` and can download a chapter PDF via `GET /chapter-pdf`.
+2. `POST /process-pdf` validates the upload and returns `202` with a `job_id`. A background task extracts text for that range, splits on chapter titles, rewrites via OpenRouter, and stores results under `backend/data/`. Closing the request does not stop that task.
+3. The home page follows `GET /jobs/{job_id}/events` for live logs. After a refresh it resumes with `Last-Event-ID`, and `GET /jobs` lists jobs it can reopen.
+4. The summary page loads `GET /book-details` and can download a chapter PDF via `GET /chapter-pdf`.
 
 ## Config
 
@@ -35,5 +36,5 @@ make test    # pytest + frontend vitest + production build
 - Chapter matching is exact string match against the extracted PDF text.
 - AI calls happen only during PDF processing; tests stub those helpers.
 - The upload zone supports click and drag-and-drop for PDF files.
-- Backend uses Loguru: stderr for live output, rotating files under `backend/logs/`.
-- `POST /process-pdf` runs `process_init` via `asyncio.to_thread` so other endpoints stay responsive during long AI work.
+- Backend uses Loguru: stderr for live output, rotating files under `backend/logs/`, and a per-job sink for the event stream.
+- PDF work still runs in a thread (`asyncio.to_thread`) so the event loop stays responsive. The thread belongs to a background job, not to the upload request. Job state is in memory for this process and is lost on restart.

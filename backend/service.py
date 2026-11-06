@@ -43,6 +43,17 @@ def safe_name(name: str) -> str:
     return cleaned
 
 
+def chapter_pdf_filename(chapter_name: str) -> str:
+    """One path segment. Slashes in titles like 'THINK WIN/WIN' are not directories."""
+    cleaned = chapter_name.replace("\x00", "").strip()
+    cleaned = cleaned.replace("/", "\u2215").replace("\\", "\u2215")
+    if not cleaned or cleaned in {".", ".."}:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail="Invalid chapter name")
+    return f"{cleaned}.pdf"
+
+
 def _client() -> OpenAI:
     key = os.getenv("OPENROUTER_KEY")
     if not key:
@@ -51,9 +62,10 @@ def _client() -> OpenAI:
     return OpenAI(base_url=OPENROUTER_URL, api_key=key)
 
 
-def create_pdf(book_name, filename, text, max_width=80):
+def create_pdf(book_name, chapter_name, text, max_width=80):
     book_dir = data_dir() / "book_pdfs" / safe_name(book_name)
     book_dir.mkdir(parents=True, exist_ok=True)
+    filename = chapter_pdf_filename(chapter_name)
     out = book_dir / filename
     logger.debug("Writing chapter PDF {}", out)
 
@@ -364,7 +376,7 @@ def process_init(pdf_content, book_name, strings_to_search, start, end):
             key,
             time.perf_counter() - summary_started,
         )
-        create_pdf(book_name, key + ".pdf", updated_content)
+        create_pdf(book_name, key, updated_content)
         ai_response[key] = updated_content
         logger.success("Chapter={!r} complete", key)
     create_json(ai_path, ai_response)

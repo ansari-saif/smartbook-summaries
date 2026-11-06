@@ -13,6 +13,13 @@ def test_extract_chapters_returns_empty_when_no_match():
     assert service.extract_chapters("plain text", ["Chapter 1"]) == {}
 
 
+def test_chapter_pdf_filename_keeps_slash_titles_in_one_segment():
+    filename = service.chapter_pdf_filename("THINK WIN/WIN")
+    assert "/" not in filename
+    assert "\\" not in filename
+    assert filename == "THINK WIN\u2215WIN.pdf"
+
+
 def test_safe_name_rejects_path_parts():
     from fastapi import HTTPException
 

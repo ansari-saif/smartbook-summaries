@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileUp, Plus, X } from 'lucide-react';
 import { Shelf, ShelfBook } from '@/components/Shelf';
@@ -8,6 +8,48 @@ import { isPdfFile } from '@/lib/pdf';
 interface APIBook {
   book_name: string;
   chapter_count: number;
+}
+
+const ACTIVE_JOB_KEY = 'smartbook:activeJob';
+const MAX_LOG_LINES = 300;
+
+type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
+
+interface JobLogLine {
+  seq: number;
+  time: string;
+  level: string;
+  message: string;
+}
+
+interface JobSummary {
+  job_id: string;
+  book_name: string;
+  status: JobStatus;
+  error: string | null;
+}
+
+function readActiveJob(): string | null {
+  try {
+    return sessionStorage.getItem(ACTIVE_JOB_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeActiveJob(jobId: string | null) {
+  try {
+    if (jobId) sessionStorage.setItem(ACTIVE_JOB_KEY, jobId);
+    else sessionStorage.removeItem(ACTIVE_JOB_KEY);
+  } catch {
+    // Storage can be blocked; the jobs list still rediscovers a running job.
+  }
+}
+
+function levelClass(level: string) {
+  if (level === 'ERROR' || level === 'CRITICAL') return 'text-error';
+  if (level === 'WARNING' || level === 'SUCCESS') return 'text-foil';
+  return 'text-paper-muted';
 }
 
 function formatSize(bytes: number) {
@@ -27,7 +69,17 @@ const Index = () => {
   const [uploadError, setUploadError] = useState('');
   const [formError, setFormError] = useState('');
   const [shelfError, setShelfError] = useState('');
+  const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
+  const [jobLogs, setJobLogs] = useState<JobLogLine[]>([]);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [recentJobs, setRecentJobs] = useState<JobSummary[]>([]);
   const navigate = useNavigate();
+  const watchGen = useRef(0);
+  const sourceRef = useRef<EventSource | null>(null);
+  const pollRef = useRef<number | null>(null);
+  const localSeq = useRef(0);
+  const logBoxRef = useRef<HTMLDivElement | null>(null);
+  const loadBooksRef = useRef<() => Promise<void>>(async () => {});
 
   const loadBooks = () =>
     fetch(api('/books'))
@@ -46,12 +98,191 @@ const Index = () => {
         );
       });
 
-  useEffect(() => {
+  loadBooksRef.current = () =>
     loadBooks().catch((error) => {
       console.error('Error fetching books:', error);
       setShelfError('The shelf could not be loaded. Check the connection and reload.');
       setBooks([]);
     });
+
+  const refreshJobs = () =>
+    fetch(api('/jobs'))
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.jobs)) setRecentJobs(data.jobs);
+      })
+      .catch(() => {});
+
+  const stopWatching = () => {
+    sourceRef.current?.close();
+    sourceRef.current = null;
+    if (pollRef.current !== null) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const appendLog = (line: JobLogLine) => {
+    setJobLogs((prev) => {
+      if (prev.some((item) => item.seq === line.seq)) return prev;
+      const next = [...prev, line];
+      return next.length > MAX_LOG_LINES ? next.slice(-MAX_LOG_LINES) : next;
+    });
+  };
+
+  const finishJob = async (gen: number, status: JobStatus, error: string | null) => {
+    if (watchGen.current !== gen) return;
+    watchGen.current += 1;
+    stopWatching();
+    setJobStatus(status);
+    setIsSubmitting(false);
+    writeActiveJob(null);
+    if (status === 'succeeded') {
+      setFormError('');
+      await loadBooksRef.current();
+      setSelectedFile(null);
+      setChapters(['']);
+      setBookName('');
+      setStartPage('');
+      setEndPage('');
+    } else if (status === 'failed') {
+      setFormError(error || 'Binding failed.');
+    }
+    void refreshJobs();
+  };
+
+  const startPolling = (jobId: string, gen: number) => {
+    const tick = async () => {
+      if (watchGen.current !== gen) return;
+      try {
+        const response = await fetch(api(`/jobs/${jobId}`));
+        if (response.status === 404) {
+          await finishJob(gen, 'failed', 'That job is no longer on the server.');
+          return;
+        }
+        if (!response.ok || watchGen.current !== gen) return;
+        const data = (await response.json()) as JobSummary;
+        if (watchGen.current !== gen) return;
+        setJobStatus(data.status);
+        if (data.status === 'succeeded' || data.status === 'failed') {
+          await finishJob(gen, data.status, data.error);
+        }
+      } catch {
+        // Keep polling; the job is still running on the server.
+      }
+    };
+    void tick();
+    pollRef.current = window.setInterval(() => {
+      void tick();
+    }, 2000);
+  };
+
+  const watchJob = (jobId: string) => {
+    stopWatching();
+    const gen = ++watchGen.current;
+    setActiveJobId(jobId);
+    setJobStatus('running');
+    setIsSubmitting(true);
+    setFormError('');
+    setJobLogs([]);
+    writeActiveJob(jobId);
+
+    let errors = 0;
+    const source = new EventSource(api(`/jobs/${jobId}/events`));
+    sourceRef.current = source;
+
+    source.addEventListener('log', (event) => {
+      if (watchGen.current !== gen) return;
+      errors = 0;
+      try {
+        appendLog(JSON.parse((event as MessageEvent).data) as JobLogLine);
+        setJobStatus('running');
+      } catch {
+        // Ignore a malformed log event and keep the stream.
+      }
+    });
+
+    source.addEventListener('status', (event) => {
+      if (watchGen.current !== gen) return;
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as {
+          status: JobStatus;
+          error?: string | null;
+        };
+        void finishJob(gen, data.status, data.error ?? null);
+      } catch {
+        void finishJob(gen, 'failed', 'Binding failed.');
+      }
+    });
+
+    source.onerror = () => {
+      if (watchGen.current !== gen || pollRef.current !== null) return;
+      errors += 1;
+      if (errors < 3) return;
+      source.close();
+      if (sourceRef.current === source) sourceRef.current = null;
+      localSeq.current -= 1;
+      appendLog({
+        seq: localSeq.current,
+        time: '',
+        level: 'WARNING',
+        message: 'Connection lost, checking status…',
+      });
+      startPolling(jobId, gen);
+    };
+  };
+
+  useEffect(() => {
+    const box = logBoxRef.current;
+    if (box) box.scrollTop = box.scrollHeight;
+  }, [jobLogs]);
+
+  useEffect(() => {
+    loadBooksRef.current();
+    void refreshJobs();
+
+    const stored = readActiveJob();
+    let cancelled = false;
+    if (stored) {
+      void (async () => {
+        try {
+          const response = await fetch(api(`/jobs/${stored}`));
+          if (cancelled) return;
+          if (response.status === 404) {
+            writeActiveJob(null);
+            return;
+          }
+          if (!response.ok) return;
+          const data = (await response.json()) as JobSummary;
+          if (cancelled) return;
+          if (data.status === 'queued' || data.status === 'running') {
+            watchJob(stored);
+            return;
+          }
+          writeActiveJob(null);
+          setJobStatus(data.status);
+          if (data.status === 'succeeded') {
+            await loadBooksRef.current();
+          } else if (data.status === 'failed') {
+            setFormError(data.error || 'Binding failed.');
+          }
+        } catch {
+          // The jobs list below can still rediscover a running job.
+        }
+      })();
+    }
+
+    return () => {
+      cancelled = true;
+      sourceRef.current?.close();
+      sourceRef.current = null;
+      if (pollRef.current !== null) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+    // Restore once on mount. watchJob/refreshJobs close over stable setters and refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const acceptPdf = (file: File | undefined | null) => {
@@ -89,6 +320,8 @@ const Index = () => {
 
     setIsSubmitting(true);
     setFormError('');
+    setJobStatus('queued');
+    setJobLogs([]);
 
     const formData = new FormData();
     formData.append('pdf_file', selectedFile);
@@ -103,24 +336,17 @@ const Index = () => {
         body: formData,
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.status !== 'success') {
+      if (!response.ok || typeof data.job_id !== 'string') {
         const detail = typeof data.detail === 'string' ? data.detail : `Binding failed (${response.status})`;
         throw new Error(detail);
       }
-
-      await loadBooks();
-      setSelectedFile(null);
-      setChapters(['']);
-      setBookName('');
-      setStartPage('');
-      setEndPage('');
+      watchJob(data.job_id);
+      void refreshJobs();
     } catch (error) {
       console.error('Error:', error);
-      setFormError(error instanceof Error ? error.message : 'Binding failed.');
-      // Server may still have finished — refresh list so the book appears if it did.
-      await loadBooks().catch(() => {});
-    } finally {
       setIsSubmitting(false);
+      setJobStatus(null);
+      setFormError(error instanceof Error ? error.message : 'Binding failed.');
     }
   };
 
@@ -165,6 +391,35 @@ const Index = () => {
             Give it a PDF, the page range to read, and the chapter titles. Each chapter is rewritten
             in plain English with a short summary at the end.
           </p>
+
+          {recentJobs.length > 0 && (
+            <div className="mt-6">
+              <h3 className="stamp-label mb-2">Processing and recent</h3>
+              <ul className="space-y-1">
+                {recentJobs.map((job) => {
+                  const live = job.status === 'queued' || job.status === 'running';
+                  const label = `${job.book_name} · ${job.status}${job.error ? ` — ${job.error}` : ''}`;
+                  return (
+                    <li key={job.job_id} className="font-stamp text-sm text-paper-muted">
+                      {live ? (
+                        <button
+                          type="button"
+                          onClick={() => watchJob(job.job_id)}
+                          className={`text-left hover:text-foil hover:underline ${
+                            job.job_id === activeJobId ? 'text-foil' : 'text-paper'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ) : (
+                        <span>{label}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
           <form onSubmit={handleBind} className="mt-8 grid gap-7 md:grid-cols-2 md:gap-x-10">
             <div className="md:row-span-2">
@@ -301,12 +556,32 @@ const Index = () => {
               <button type="submit" className="foil-plate h-12 w-full sm:w-auto sm:px-10" disabled={!ready || isSubmitting}>
                 {isSubmitting ? 'Binding…' : 'Bind book'}
               </button>
-              {isSubmitting && (
-                <div className="mt-4 max-w-prose" role="status">
-                  <div className="headband band-run h-1 w-full rounded-full" aria-hidden />
-                  <p className="mt-3 font-stamp text-sm text-paper-muted">
-                    Each chapter is being rewritten. This can take several minutes; keep this tab open.
+              {(isSubmitting || jobLogs.length > 0) && (
+                <div className="mt-4 max-w-prose">
+                  {isSubmitting && <div className="headband band-run h-1 w-full rounded-full" aria-hidden />}
+                  <p className="mt-3 font-stamp text-sm text-paper-muted" role="status">
+                    {isSubmitting
+                      ? 'Each chapter is being rewritten. You can refresh this page; processing continues and the log reconnects.'
+                      : jobStatus === 'succeeded'
+                        ? 'Binding finished.'
+                        : 'Binding stopped.'}
                   </p>
+                  {jobLogs.length > 0 && (
+                    <div
+                      ref={logBoxRef}
+                      role="log"
+                      aria-live="polite"
+                      aria-relevant="additions"
+                      className="mt-3 max-h-56 overflow-y-auto rounded-[3px] bg-black/40 px-3 py-2"
+                    >
+                      {jobLogs.map((line) => (
+                        <p key={line.seq} className="font-stamp text-xs leading-relaxed text-paper">
+                          <span className={`${levelClass(line.level)} mr-2 inline-block w-16`}>{line.level}</span>
+                          <span className="whitespace-pre-wrap">{line.message}</span>
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {formError && (
