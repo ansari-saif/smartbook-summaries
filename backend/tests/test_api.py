@@ -289,6 +289,33 @@ def test_process_pdf_job_fails_when_no_chapter_matches(tmp_path, monkeypatch):
     assert "No chapters matched" in job["error"]
 
 
+def test_sse_omits_debug_logs(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    def fake(_pdf, book_name, *_rest):
+        logger.debug("HIDDENDEBUG {}", book_name)
+        logger.info("VISIBLEINFO {}", book_name)
+
+    monkeypatch.setattr(main, "process_init", fake)
+    response = client.post(
+        "/process-pdf",
+        data={
+            "search_strings": '["Chapter 1"]',
+            "start": "1",
+            "end": "1",
+            "book_name": "Demo Book",
+        },
+        files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
+    )
+    job_id = response.json()["job_id"]
+    assert _wait_for_job(job_id)["status"] == "succeeded"
+    events = _parse_sse(client.get(f"/jobs/{job_id}/events").text)
+    messages = "\n".join(event["data"]["message"] for event in events if event["event"] == "log")
+    assert "HIDDENDEBUG" not in messages
+    assert "VISIBLEINFO Demo Book" in messages
+    assert all(event["data"]["level"] != "DEBUG" for event in events if event["event"] == "log")
+
+
 def test_sse_replays_logs_and_terminal_status(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setattr(service, "get_ai_response", lambda prompt: "rewrite")

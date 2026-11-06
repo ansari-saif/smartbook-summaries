@@ -77,12 +77,13 @@ def install_job_log_sink() -> None:
     """Route loguru records that carry extra['job_id'] into that job's history.
 
     The sink itself does not enqueue. From a worker thread it only schedules
-    onto the event loop; records without a job id are ignored.
+    onto the event loop; records without a job id are ignored. Debug lines stay
+    on the server logs and are not streamed.
     """
     global _sink_id
     if _sink_id is not None:
         return
-    _sink_id = logger.add(_route_record, level="DEBUG", enqueue=False)
+    _sink_id = logger.add(_route_record, level="INFO", enqueue=False)
 
 
 def create_job(book_name: str) -> Job:
