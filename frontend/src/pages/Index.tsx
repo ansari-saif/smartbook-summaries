@@ -70,13 +70,23 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+interface ChapterDraft {
+  title: string;
+  page: string;
+}
+
+function emptyChapter(): ChapterDraft {
+  return { title: '', page: '' };
+}
+
 const Index = () => {
   const [books, setBooks] = useState<ShelfBook[] | null>(null);
-  const [chapters, setChapters] = useState<string[]>(['']);
+  const [chapters, setChapters] = useState<ChapterDraft[]>([emptyChapter()]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [bookName, setBookName] = useState('');
-  const [startPage, setStartPage] = useState('');
-  const [endPage, setEndPage] = useState('');
+  const [contentsPage, setContentsPage] = useState('');
+  const [pageCount, setPageCount] = useState<number | null>(null);
+  const [readingContents, setReadingContents] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -319,7 +329,11 @@ const Index = () => {
     }
     setUploadError('');
     setSelectedFile(file);
-    if (!bookName) setBookName(file.name.replace(/\.pdf$/i, ''));
+    setBookName(file.name.replace(/\.pdf$/i, ''));
+    setChapters([emptyChapter()]);
+    setContentsPage('');
+    setPageCount(null);
+    setFormError('');
   };
 
   const handleDrag = (event: React.DragEvent<HTMLLabelElement>, over: boolean) => {
@@ -333,13 +347,58 @@ const Index = () => {
     acceptPdf(event.dataTransfer.files?.[0]);
   };
 
-  const updateChapter = (index: number, name: string) =>
-    setChapters((prev) => prev.map((chapter, i) => (i === index ? name : chapter)));
+  const updateChapter = (index: number, patch: Partial<ChapterDraft>) =>
+    setChapters((prev) => prev.map((chapter, i) => (i === index ? { ...chapter, ...patch } : chapter)));
 
-  const cleanChapters = chapters.map((c) => c.trim()).filter(Boolean);
-  const pagesValid =
-    Number(startPage) >= 1 && Number(endPage) >= Number(startPage);
-  const ready = !!selectedFile && !!bookName.trim() && pagesValid && cleanChapters.length > 0;
+  const chapterEnd = (index: number) => {
+    const current = Number(chapters[index].page);
+    if (!Number.isInteger(current) || current < 1) return null;
+    for (let next = index + 1; next < chapters.length; next += 1) {
+      const start = Number(chapters[next].page);
+      if (Number.isInteger(start) && start >= 1) return Math.max(current, start - 1);
+    }
+    return pageCount ? Math.max(current, pageCount) : null;
+  };
+
+  const filled = chapters.filter((chapter) => chapter.title.trim() || chapter.page.trim());
+  const numbered = filled
+    .map((chapter) => Number(chapter.page))
+    .filter((page) => Number.isInteger(page) && page >= 1);
+  const pagesInOrder = numbered.every((page, index) => index === 0 || page >= numbered[index - 1]);
+  const chaptersReady =
+    filled.length > 0 &&
+    filled.every((chapter) => chapter.title.trim() && Number(chapter.page) >= 1) &&
+    pagesInOrder;
+  const contentsValid = Number(contentsPage) >= 1;
+  const ready = !!selectedFile && !!bookName.trim() && chaptersReady && !readingContents;
+
+  const readContents = async () => {
+    if (!selectedFile || !contentsValid || readingContents) return;
+    setReadingContents(true);
+    setFormError('');
+    const formData = new FormData();
+    formData.append('pdf_file', selectedFile);
+    formData.append('contents_page', contentsPage);
+    try {
+      const response = await fetch(api('/contents'), { method: 'POST', body: formData });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !Array.isArray(data.chapters)) {
+        const detail = typeof data.detail === 'string' ? data.detail : `Could not read the contents (${response.status})`;
+        throw new Error(detail);
+      }
+      setPageCount(typeof data.page_count === 'number' ? data.page_count : null);
+      setChapters(
+        data.chapters.map((chapter: { title?: string; page?: number | null }) => ({
+          title: chapter.title ?? '',
+          page: chapter.page == null ? '' : String(chapter.page),
+        })),
+      );
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Could not read the contents.');
+    } finally {
+      setReadingContents(false);
+    }
+  };
 
   const handleBind = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -352,9 +411,10 @@ const Index = () => {
 
     const formData = new FormData();
     formData.append('pdf_file', selectedFile);
-    formData.append('search_strings', JSON.stringify(cleanChapters));
-    formData.append('start', startPage);
-    formData.append('end', endPage);
+    formData.append(
+      'chapters',
+      JSON.stringify(filled.map((chapter) => ({ title: chapter.title.trim(), page: Number(chapter.page) }))),
+    );
     formData.append('book_name', bookName.trim());
 
     try {
@@ -415,8 +475,8 @@ const Index = () => {
             Bind a new book
           </h2>
           <p className="mt-2 max-w-prose font-read text-base leading-relaxed text-paper-muted">
-            Give it a PDF, the page range to read, and the chapter titles. Each chapter is rewritten
-            in plain English with a short summary at the end.
+            Give it a PDF and the contents page. Each chapter is rewritten in plain English with a
+            short summary at the end.
           </p>
 
           {recentJobs.length > 0 && (
@@ -467,7 +527,7 @@ const Index = () => {
                 <FileUp className="h-8 w-8 text-foil" strokeWidth={1.5} aria-hidden />
                 {selectedFile ? (
                   <>
-                    <span className="mt-3 break-all font-stamp text-base text-paper">{selectedFile.name}</span>
+                    <span className="mt-3 break-words font-stamp text-base text-paper">{selectedFile.name}</span>
                     <span className="mt-1 font-stamp text-xs text-paper-muted">
                       {formatSize(selectedFile.size)} · choose another
                     </span>
@@ -506,72 +566,87 @@ const Index = () => {
             </div>
 
             <fieldset>
-              <legend className="stamp-label mb-2">Pages to read</legend>
+              <legend className="stamp-label mb-2">Contents page</legend>
               <div className="flex items-center gap-3">
                 <input
-                  id="startPage"
+                  id="contentsPage"
                   type="number"
                   inputMode="numeric"
                   min="1"
-                  value={startPage}
-                  onChange={(e) => setStartPage(e.target.value)}
-                  placeholder="From"
-                  aria-label="First page"
-                  className="field tabular-nums"
+                  value={contentsPage}
+                  onChange={(e) => setContentsPage(e.target.value)}
+                  placeholder="20"
+                  aria-label="Contents page"
+                  className="field w-28 tabular-nums"
                 />
-                <span className="font-stamp text-paper-muted" aria-hidden>–</span>
-                <input
-                  id="endPage"
-                  type="number"
-                  inputMode="numeric"
-                  min="1"
-                  value={endPage}
-                  onChange={(e) => setEndPage(e.target.value)}
-                  placeholder="To"
-                  aria-label="Last page"
-                  className="field tabular-nums"
-                />
+                <button
+                  type="button"
+                  onClick={() => void readContents()}
+                  disabled={!selectedFile || !contentsValid || readingContents}
+                  className="foil-line h-12 px-4"
+                >
+                  {readingContents ? 'Reading…' : 'Read contents'}
+                </button>
               </div>
-              {startPage && endPage && !pagesValid && (
-                <p className="mt-2 font-stamp text-sm text-error">
-                  The last page has to come after the first.
-                </p>
-              )}
+              <p className="mt-2 font-stamp text-sm text-paper-muted">
+                The page number shown in the PDF viewer where the table of contents starts.
+              </p>
             </fieldset>
 
             <fieldset className="md:col-span-2">
               <legend className="stamp-label mb-1">Chapters</legend>
               <p className="mb-3 font-stamp text-sm text-paper-muted">
-                Type each title exactly as it is printed in the PDF; that is how chapters are found.
+                Each row is a chapter and the PDF page where it starts. Remove any you do not want bound.
               </p>
+              {filled.length > 1 && !pagesInOrder && (
+                <p className="mb-3 font-stamp text-sm text-error">Chapter pages have to stay in order.</p>
+              )}
               <ol className="space-y-2">
-                {chapters.map((chapter, index) => (
-                  <li key={index} className="flex items-center gap-2">
-                    <span className="w-6 shrink-0 text-right font-stamp text-sm tabular-nums text-foil/80">
-                      {index + 1}
-                    </span>
-                    <input
-                      value={chapter}
-                      onChange={(e) => updateChapter(index, e.target.value)}
-                      placeholder={index === 0 ? 'Habit 1: Be Proactive' : 'Chapter title'}
-                      aria-label={`Chapter ${index + 1} title`}
-                      className="field min-w-0 flex-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setChapters((prev) => prev.filter((_, i) => i !== index))}
-                      disabled={chapters.length === 1}
-                      aria-label={`Remove chapter ${index + 1}`}
-                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[3px] text-paper-muted transition-colors hover:bg-black/30 hover:text-paper disabled:opacity-30 sm:h-11 sm:w-11"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </li>
-                ))}
+                {chapters.map((chapter, index) => {
+                  const end = chapterEnd(index);
+                  return (
+                    <li key={index} className="flex items-center gap-2">
+                      <span className="w-6 shrink-0 text-right font-stamp text-sm tabular-nums text-foil/80">
+                        {index + 1}
+                      </span>
+                      <input
+                        value={chapter.title}
+                        onChange={(e) => updateChapter(index, { title: e.target.value })}
+                        placeholder={index === 0 ? 'Habit 1: Be Proactive' : 'Chapter title'}
+                        aria-label={`Chapter ${index + 1} title`}
+                        className="field min-w-0 flex-1"
+                      />
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min="1"
+                        value={chapter.page}
+                        onChange={(e) => updateChapter(index, { page: e.target.value })}
+                        placeholder="Page"
+                        aria-label={`Chapter ${index + 1} page`}
+                        className="field w-20 shrink-0 tabular-nums"
+                      />
+                      {end != null && (
+                        <span className="hidden w-14 shrink-0 font-stamp text-sm tabular-nums text-paper-muted sm:inline">
+                          – {end}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setChapters((prev) => prev.filter((_, i) => i !== index))}
+                        disabled={chapters.length === 1}
+                        aria-label={`Remove chapter ${index + 1}`}
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[3px] text-paper-muted transition-colors hover:bg-black/30 hover:text-paper disabled:opacity-30 sm:h-11 sm:w-11"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </li>
+                  );
+                })}
               </ol>
               <button
                 type="button"
-                onClick={() => setChapters((prev) => [...prev, ''])}
+                onClick={() => setChapters((prev) => [...prev, emptyChapter()])}
                 className="foil-line mt-3 h-11 px-4 sm:ml-8"
               >
                 <Plus className="h-4 w-4" />

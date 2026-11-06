@@ -69,6 +69,10 @@ def _parse_sse(body: str) -> list[dict]:
     return events
 
 
+def _chapters(*pairs: tuple[str, int]) -> str:
+    return json.dumps([{"title": title, "page": page} for title, page in pairs])
+
+
 def _pdf_bytes() -> bytes:
     doc = fitz.open()
     page = doc.new_page()
@@ -105,9 +109,7 @@ def test_process_pdf_writes_summary_and_chapter_pdf(tmp_path, monkeypatch):
     response = client.post(
         "/process-pdf",
         data={
-            "search_strings": '["Chapter 1", "Chapter 2"]',
-            "start": "1",
-            "end": "1",
+            "chapters": _chapters(("Chapter 1", 1), ("Chapter 2", 1)),
             "book_name": "Demo Book",
         },
         files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
@@ -151,9 +153,7 @@ def test_process_pdf_chapter_title_with_slash(tmp_path, monkeypatch):
     response = client.post(
         "/process-pdf",
         data={
-            "search_strings": '["THINK WIN/WIN"]',
-            "start": "1",
-            "end": "1",
+            "chapters": _chapters(("THINK WIN/WIN", 1)),
             "book_name": "The 7 Habits of Highly Effective People",
         },
         files={"pdf_file": ("habits.pdf", pdf_bytes, "application/pdf")},
@@ -192,9 +192,7 @@ def test_process_pdf_merges_chapters_for_same_book(tmp_path, monkeypatch):
     first = client.post(
         "/process-pdf",
         data={
-            "search_strings": '["Chapter 1"]',
-            "start": "1",
-            "end": "1",
+            "chapters": _chapters(("Chapter 1", 1)),
             "book_name": "Demo Book",
         },
         files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
@@ -205,9 +203,7 @@ def test_process_pdf_merges_chapters_for_same_book(tmp_path, monkeypatch):
     second = client.post(
         "/process-pdf",
         data={
-            "search_strings": '["Chapter 2"]',
-            "start": "1",
-            "end": "1",
+            "chapters": _chapters(("Chapter 2", 1)),
             "book_name": "Demo Book",
         },
         files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
@@ -232,9 +228,7 @@ def test_invalid_upload_does_not_create_a_job():
     response = client.post(
         "/process-pdf",
         data={
-            "search_strings": "not-json",
-            "start": "1",
-            "end": "1",
+            "chapters": "not-json",
             "book_name": "Demo Book",
         },
         files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
@@ -251,9 +245,7 @@ def test_jobs_list_includes_created_job(tmp_path, monkeypatch):
     response = client.post(
         "/process-pdf",
         data={
-            "search_strings": '["Chapter 1"]',
-            "start": "1",
-            "end": "1",
+            "chapters": _chapters(("Chapter 1", 1)),
             "book_name": "Demo Book",
         },
         files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
@@ -268,25 +260,86 @@ def test_jobs_list_includes_created_job(tmp_path, monkeypatch):
     assert listed[0]["status"] == "succeeded"
 
 
-def test_process_pdf_job_fails_when_no_chapter_matches(tmp_path, monkeypatch):
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(service, "get_ai_response", lambda prompt: "rewrite")
-    monkeypatch.setattr(service, "get_ai_response_summery", lambda prompt: "\n\nSummary : \nshort")
+def _contents_pdf() -> bytes:
+    doc = fitz.open()
+    contents = doc.new_page()
+    contents.insert_htmlbox(fitz.Rect(72, 36, 540, 760), "CONTENTS<br>Overview<br>Habit 1: Be Proactive")
+    overview = doc.new_page()
+    overview.insert_htmlbox(
+        fitz.Rect(72, 36, 540, 760),
+        "Overview<br>" + ("A paradigm is the way we see the world. " * 4),
+    )
+    habit = doc.new_page()
+    habit.insert_htmlbox(
+        fitz.Rect(72, 36, 540, 760),
+        "HABIT 1:<br>BE PROACTIVE<br>Take responsibility for your choices.",
+    )
+    doc.set_toc([[1, "Overview", 2], [1, "Habit 1: Be Proactive", 3]])
+    data = doc.tobytes()
+    doc.close()
+    return data
 
+
+def test_contents_uses_outline_pages_for_split_headings():
+    response = client.post(
+        "/contents",
+        data={"contents_page": "1"},
+        files={"pdf_file": ("book.pdf", _contents_pdf(), "application/pdf")},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["page_count"] == 3
+    assert body["chapters"] == [
+        {"title": "Overview", "page": 2},
+        {"title": "Habit 1: Be Proactive", "page": 3},
+    ]
+
+
+def test_contents_page_past_the_end_is_400():
+    response = client.post(
+        "/contents",
+        data={"contents_page": "9"},
+        files={"pdf_file": ("book.pdf", _contents_pdf(), "application/pdf")},
+    )
+    assert response.status_code == 400
+
+
+def test_bind_slices_only_the_requested_chapter(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    seen: list[str] = []
+
+    def fake(prompt):
+        seen.append(prompt)
+        return "rewrite"
+
+    monkeypatch.setattr(service, "get_ai_response", fake)
+    monkeypatch.setattr(service, "get_ai_response_summery", lambda prompt: "\n\nSummary : \nshort")
     response = client.post(
         "/process-pdf",
         data={
-            "search_strings": '["Missing Chapter"]',
-            "start": "1",
-            "end": "1",
+            "chapters": _chapters(("Habit 1: Be Proactive", 3)),
+            "book_name": "Demo Book",
+        },
+        files={"pdf_file": ("book.pdf", _contents_pdf(), "application/pdf")},
+    )
+    assert response.status_code == 202, response.text
+    assert _wait_for_job(response.json()["job_id"])["status"] == "succeeded"
+    joined = "\n".join(seen)
+    assert "BE PROACTIVE" in joined
+    assert "paradigm" not in joined.lower()
+
+
+def test_chapter_page_past_the_end_does_not_create_a_job():
+    response = client.post(
+        "/process-pdf",
+        data={
+            "chapters": _chapters(("Chapter 1", 5)),
             "book_name": "Demo Book",
         },
         files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
     )
-    assert response.status_code == 202, response.text
-    job = _wait_for_job(response.json()["job_id"])
-    assert job["status"] == "failed"
-    assert "No chapters matched" in job["error"]
+    assert response.status_code == 400
+    assert client.get("/jobs").json()["jobs"] == []
 
 
 def test_eta_seed_then_measured_average():
@@ -306,9 +359,7 @@ def test_progress_event_and_job_payload(tmp_path, monkeypatch):
     response = client.post(
         "/process-pdf",
         data={
-            "search_strings": '["Chapter 1"]',
-            "start": "1",
-            "end": "1",
+            "chapters": _chapters(("Chapter 1", 1)),
             "book_name": "Demo Book",
         },
         files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
@@ -335,9 +386,7 @@ def test_sse_omits_debug_logs(tmp_path, monkeypatch):
     response = client.post(
         "/process-pdf",
         data={
-            "search_strings": '["Chapter 1"]',
-            "start": "1",
-            "end": "1",
+            "chapters": _chapters(("Chapter 1", 1)),
             "book_name": "Demo Book",
         },
         files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
@@ -359,9 +408,7 @@ def test_sse_replays_logs_and_terminal_status(tmp_path, monkeypatch):
     response = client.post(
         "/process-pdf",
         data={
-            "search_strings": '["Chapter 1"]',
-            "start": "1",
-            "end": "1",
+            "chapters": _chapters(("Chapter 1", 1)),
             "book_name": "Demo Book",
         },
         files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
@@ -389,9 +436,7 @@ def test_sse_last_event_id_skips_already_seen_logs(tmp_path, monkeypatch):
     response = client.post(
         "/process-pdf",
         data={
-            "search_strings": '["Chapter 1"]',
-            "start": "1",
-            "end": "1",
+            "chapters": _chapters(("Chapter 1", 1)),
             "book_name": "Demo Book",
         },
         files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
@@ -428,9 +473,7 @@ def test_sse_disconnect_does_not_cancel_job(tmp_path, monkeypatch):
         response = client.post(
             "/process-pdf",
             data={
-                "search_strings": '["Chapter 1"]',
-                "start": "1",
-                "end": "1",
+                "chapters": _chapters(("Chapter 1", 1)),
                 "book_name": "Demo Book",
             },
             files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},
@@ -482,9 +525,7 @@ def test_concurrent_jobs_keep_their_own_logs(tmp_path, monkeypatch):
         response = client.post(
             "/process-pdf",
             data={
-                "search_strings": '["Chapter 1"]',
-                "start": "1",
-                "end": "1",
+                "chapters": _chapters(("Chapter 1", 1)),
                 "book_name": book_name,
             },
             files={"pdf_file": ("demo.pdf", _pdf_bytes(), "application/pdf")},

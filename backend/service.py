@@ -223,6 +223,146 @@ def get_ai_response_summery(prompt):
         return f"Error fetching response: {e}"
 
 
+_DASH_CHARS = "\u2010\u2011\u2012\u2013\u2014\u2212\ufe58\ufe63\uff0d"
+_CONTENTS_HEADING = "contents"
+_MAX_CONTENTS_PAGES = 4
+_CONTENTS_LINE_LIMIT = 80
+_PRINTED_PAGE = re.compile(r"^(?P<title>.*?)(?:\.{2,}|\s{2,})\s*(?P<page>\d+)\s*$")
+
+
+def _fold_title(text: str) -> str:
+    """Compare titles ignoring case, line breaks, and which dash was used."""
+    for dash in _DASH_CHARS:
+        text = text.replace(dash, "-")
+    text = re.sub(r"\s+", " ", text.replace("\n", " ")).strip().casefold()
+    return text
+
+
+def _open_pdf(pdf_content: bytes):
+    try:
+        return fitz.open(stream=BytesIO(pdf_content), filetype="pdf")
+    except Exception as e:
+        raise ValueError("Could not read that PDF") from e
+
+
+def pdf_page_count(pdf_content: bytes) -> int:
+    doc = _open_pdf(pdf_content)
+    try:
+        return doc.page_count
+    finally:
+        doc.close()
+
+
+def _page_lines(page) -> list[str]:
+    return [line.strip() for line in page.get_text("text").splitlines() if line.strip()]
+
+
+def _looks_like_contents(text: str) -> bool:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) < 3:
+        return False
+    return all(len(line) <= _CONTENTS_LINE_LIMIT for line in lines)
+
+
+def _split_contents_line(line: str) -> tuple[str, int | None]:
+    match = _PRINTED_PAGE.match(line)
+    if not match:
+        return line.strip(), None
+    title = match.group("title").strip(" .\t")
+    if not title:
+        return line.strip(), None
+    return title, int(match.group("page"))
+
+
+def _outline_pages(doc) -> dict[str, int]:
+    pages = {}
+    for _level, title, page in doc.get_toc():
+        folded = _fold_title(title)
+        if folded and folded not in pages and page >= 1:
+            pages[folded] = page
+    return pages
+
+
+def _find_title_page(doc, folded_title: str, after_page: int) -> int | None:
+    for index in range(after_page, doc.page_count):
+        folded = _fold_title(doc[index].get_text("text"))
+        if folded_title and folded_title in folded:
+            return index + 1
+    return None
+
+
+def read_contents(pdf_content: bytes, contents_page: int) -> dict:
+    """Titles from a contents page, each with the PDF page where it starts."""
+    if contents_page < 1:
+        raise ValueError("contents_page must be a 1-based page number")
+    doc = _open_pdf(pdf_content)
+    try:
+        if contents_page > doc.page_count:
+            raise ValueError(
+                f"contents_page {contents_page} is past the end of the PDF ({doc.page_count} pages)"
+            )
+        last_index = contents_page - 1
+        titles: list[tuple[str, int | None]] = []
+        for index in range(contents_page - 1, min(doc.page_count, contents_page - 1 + _MAX_CONTENTS_PAGES)):
+            text = doc[index].get_text("text")
+            if index != contents_page - 1 and not _looks_like_contents(text):
+                break
+            last_index = index
+            for line in _page_lines(doc[index]):
+                title, printed = _split_contents_line(line)
+                if not title or _fold_title(title) == _CONTENTS_HEADING:
+                    continue
+                titles.append((title, printed))
+        if not titles:
+            raise ValueError("No chapter titles found on that contents page")
+
+        outline = _outline_pages(doc)
+        chapters = []
+        for title, printed in titles:
+            folded = _fold_title(title)
+            page = outline.get(folded)
+            if page is None:
+                page = _find_title_page(doc, folded, last_index + 1)
+            if page is None:
+                page = printed
+            chapters.append({"title": title, "page": page})
+        logger.info(
+            "Contents page {} yielded {} titles (pdf has {} pages)",
+            contents_page,
+            len(chapters),
+            doc.page_count,
+        )
+        return {"chapters": chapters, "page_count": doc.page_count}
+    finally:
+        doc.close()
+
+
+def slice_chapters(pdf_content: bytes, chapters: list[dict]) -> dict[str, str]:
+    """Each chapter runs from its page through the page before the next one."""
+    doc = _open_pdf(pdf_content)
+    try:
+        page_count = doc.page_count
+        sliced: dict[str, str] = {}
+        for index, chapter in enumerate(chapters):
+            start = chapter["page"]
+            if index + 1 < len(chapters):
+                end = chapters[index + 1]["page"] - 1
+            else:
+                end = page_count
+            if end < start:
+                end = start
+            if start < 1 or start > page_count:
+                raise ValueError(f"Chapter {chapter['title']!r} starts on page {start}, but the PDF has {page_count} pages")
+            end = min(end, page_count)
+            text = ""
+            for page in doc[start - 1 : end]:
+                text += page.get_text("text")
+            sliced[chapter["title"]] = text
+        return sliced
+    finally:
+        doc.close()
+
+
 def extract_chapters(text, strings_to_search):
     pattern = "|".join(re.escape(ch) for ch in strings_to_search)
     matches = re.split(f"({pattern})", text)
@@ -309,27 +449,17 @@ def _load_json_dict(path: Path) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def process_init(pdf_content, book_name, strings_to_search, start, end):
+def process_init(pdf_content, book_name, chapters):
     book_name = safe_name(book_name)
     logger.info(
-        "Processing book={!r} chapters={} pages={}-{}",
+        "Processing book={!r} chapters={}",
         book_name,
-        strings_to_search,
-        start,
-        end,
+        [chapter["title"] for chapter in chapters],
     )
-    content = extract_text_from_pdf(pdf_content, start, end)
-    chapters = extract_chapters(content, strings_to_search)
+    chapters = slice_chapters(pdf_content, chapters)
     if not chapters:
-        preview = content[:300].replace("\n", " ")
-        logger.warning(
-            "No chapter titles matched for book={!r}. Looking for {}. Text preview: {!r}",
-            book_name,
-            strings_to_search,
-            preview,
-        )
-        raise ValueError("No chapters matched the given names in that page range")
-    logger.info("Matched {} chapters for book={!r}: {}", len(chapters), book_name, list(chapters))
+        raise ValueError("No chapters to process")
+    logger.info("Sliced {} chapters for book={!r}: {}", len(chapters), book_name, list(chapters))
 
     raw_path = data_dir() / f"{book_name}.json"
     ai_path = data_dir() / "ai" / f"{book_name}.json"

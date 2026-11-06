@@ -9,7 +9,7 @@ from loguru import logger
 
 import jobs
 from logging_config import setup_logging
-from service import chapter_pdf_filename, data_dir, process_init, safe_name
+from service import chapter_pdf_filename, data_dir, pdf_page_count, process_init, read_contents, safe_name
 
 setup_logging()
 jobs.install_job_log_sink()
@@ -47,49 +47,74 @@ async def health_check():
     return {"status": "healthy", "service": "smartbook-summaries"}
 
 
+def _parse_chapters(raw: str, page_count: int) -> list[dict]:
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        raise ValueError("Invalid JSON format for chapters")
+    if not isinstance(parsed, list) or not parsed:
+        raise ValueError("chapters must be a list of {title, page}")
+    chapters = []
+    previous = 0
+    for item in parsed:
+        if not isinstance(item, dict):
+            raise ValueError("chapters must be a list of {title, page}")
+        title = item.get("title")
+        page = item.get("page")
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError("each chapter needs a title")
+        if isinstance(page, bool) or not isinstance(page, int):
+            raise ValueError("each chapter needs an integer page")
+        if page < 1 or page > page_count:
+            raise ValueError(f"page {page} is outside the PDF ({page_count} pages)")
+        if page < previous:
+            raise ValueError("chapter pages must be in order")
+        title = title.strip()
+        chapter_pdf_filename(title)
+        chapters.append({"title": title, "page": page})
+        previous = page
+    return chapters
+
+
+@app.post("/contents")
+async def contents(
+    pdf_file: UploadFile = File(...),
+    contents_page: int = Form(...),
+):
+    logger.info("POST /contents page={} file={!r}", contents_page, pdf_file.filename)
+    pdf_content = await pdf_file.read()
+    if not pdf_content:
+        raise HTTPException(status_code=400, detail="PDF file is empty")
+    try:
+        return await asyncio.to_thread(read_contents, pdf_content, contents_page)
+    except ValueError as e:
+        logger.warning("contents failed: {}", e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/process-pdf", status_code=202)
 async def process_pdf(
     pdf_file: UploadFile = File(...),
-    search_strings: str = Form(...),
-    start: int = Form(...),
-    end: int = Form(...),
+    chapters: str = Form(...),
     book_name: str = Form(...),
 ):
     logger.info(
-        "POST /process-pdf book={!r} pages={}-{} file={!r} chapters_raw={!r}",
+        "POST /process-pdf book={!r} file={!r} chapters_raw={!r}",
         book_name,
-        start,
-        end,
         pdf_file.filename,
-        search_strings[:200],
+        chapters[:200],
     )
     try:
-        strings_to_search = json.loads(search_strings)
-        if not isinstance(strings_to_search, list) or not all(
-            isinstance(item, str) and item.strip() for item in strings_to_search
-        ):
-            logger.warning("Invalid search_strings for book={!r}: {!r}", book_name, search_strings)
-            raise HTTPException(status_code=400, detail="search_strings must be a list of chapter names")
-        if start < 1 or end < start:
-            logger.warning("Invalid page range for book={!r}: start={} end={}", book_name, start, end)
-            raise HTTPException(status_code=400, detail="start and end must be 1-based page numbers, with end >= start")
         safe_name(book_name)
-        for chapter in strings_to_search:
-            chapter_pdf_filename(chapter)
         pdf_content = await pdf_file.read()
         if not pdf_content:
             logger.warning("Empty PDF upload for book={!r}", book_name)
             raise HTTPException(status_code=400, detail="PDF file is empty")
-        logger.debug(
-            "PDF bytes={} chapters={}",
-            len(pdf_content),
-            strings_to_search,
-        )
+        page_count = pdf_page_count(pdf_content)
+        parsed_chapters = _parse_chapters(chapters, page_count)
+        logger.debug("PDF bytes={} pages={} chapters={}", len(pdf_content), page_count, parsed_chapters)
     except HTTPException:
         raise
-    except json.JSONDecodeError:
-        logger.warning("Invalid JSON search_strings for book={!r}", book_name)
-        raise HTTPException(status_code=400, detail="Invalid JSON format for search_strings")
     except ValueError as e:
         logger.warning("process-pdf validation failed for book={!r}: {}", book_name, e)
         raise HTTPException(status_code=400, detail=str(e))
@@ -97,21 +122,17 @@ async def process_pdf(
     # Validation finished. The job runs after this response; closing the client
     # (refresh, SSE drop) does not cancel it.
     job = jobs.create_job(book_name)
-    task = asyncio.create_task(
-        _run_job(job, pdf_content, book_name, strings_to_search, start, end)
-    )
+    task = asyncio.create_task(_run_job(job, pdf_content, book_name, parsed_chapters))
     jobs.track_task(task)
     return {"status": "queued", "job_id": job.id, "book_name": book_name}
 
 
-async def _run_job(job, pdf_content, book_name, strings_to_search, start, end):
+async def _run_job(job, pdf_content, book_name, chapters):
     jobs.mark_running(job)
     try:
         with jobs.bind_job(job.id), logger.contextualize(job_id=job.id):
-            await asyncio.to_thread(
-                process_init, pdf_content, book_name, strings_to_search, start, end
-            )
-            logger.success("Processed book={!r} ({} chapters)", book_name, len(strings_to_search))
+            await asyncio.to_thread(process_init, pdf_content, book_name, chapters)
+            logger.success("Processed book={!r} ({} chapters)", book_name, len(chapters))
         jobs.mark_succeeded(job)
     except asyncio.CancelledError:
         raise

@@ -1,4 +1,19 @@
+import fitz
+
 import service
+
+
+def _pdf_with_pages(pages: list[str], outline: list | None = None) -> bytes:
+    doc = fitz.open()
+    for text in pages:
+        page = doc.new_page()
+        html = "<br>".join(text.split("\n"))
+        page.insert_htmlbox(fitz.Rect(72, 36, 540, 760), html)
+    if outline:
+        doc.set_toc(outline)
+    data = doc.tobytes()
+    doc.close()
+    return data
 
 
 def test_extract_chapters_splits_on_titles():
@@ -11,6 +26,97 @@ def test_extract_chapters_splits_on_titles():
 
 def test_extract_chapters_returns_empty_when_no_match():
     assert service.extract_chapters("plain text", ["Chapter 1"]) == {}
+
+
+def test_read_contents_keeps_a_following_contents_page_and_stops_at_prose():
+    pdf = _pdf_with_pages(
+        [
+            "CONTENTS\nForeword\nInside-Out\nOverview",
+            "Appendix A\nAppendix B\nInterview",
+            "This opening paragraph is definitely longer than eighty characters and should stop the contents scan.",
+        ]
+    )
+    result = service.read_contents(pdf, 1)
+    assert [item["title"] for item in result["chapters"]] == [
+        "Foreword",
+        "Inside-Out",
+        "Overview",
+        "Appendix A",
+        "Appendix B",
+        "Interview",
+    ]
+
+
+def test_read_contents_finds_a_heading_split_across_lines():
+    pdf = _pdf_with_pages(
+        [
+            "Habit 1: Be Proactive",
+            "Something else entirely on this page.",
+            "HABIT 1:\nBE PROACTIVE\nTake responsibility.",
+        ]
+    )
+    result = service.read_contents(pdf, 1)
+    assert result["chapters"] == [{"title": "Habit 1: Be Proactive", "page": 3}]
+
+
+def test_read_contents_uses_a_printed_page_when_the_title_is_not_in_the_body():
+    pdf = _pdf_with_pages(
+        [
+            "Appendix .......... 4",
+            "Unrelated body text with no matching heading.",
+        ]
+    )
+    result = service.read_contents(pdf, 1)
+    assert result["chapters"] == [{"title": "Appendix", "page": 4}]
+
+
+def test_read_contents_matches_outline_across_dash_characters():
+    pdf = _pdf_with_pages(
+        ["The 7 Habits\u2014An Overview", "The chapter body."],
+        outline=[[1, "The 7 Habits-An Overview", 2]],
+    )
+    result = service.read_contents(pdf, 1)
+    assert result["chapters"] == [{"title": "The 7 Habits\u2014An Overview", "page": 2}]
+    assert result["page_count"] == 2
+
+
+def test_read_contents_rejects_a_page_past_the_end():
+    pdf = _pdf_with_pages(["CONTENTS\nOne\nTwo\nThree"])
+    try:
+        service.read_contents(pdf, 3)
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "past the end" in str(exc)
+
+
+def test_slice_chapters_stops_before_the_next_start_page():
+    pdf = _pdf_with_pages(
+        [
+            "one",
+            "HABIT 1:\nBE PROACTIVE",
+            "still habit",
+            "HABIT 2:\nBEGIN",
+        ]
+    )
+    sliced = service.slice_chapters(
+        pdf,
+        [{"title": "Habit 1", "page": 2}, {"title": "Habit 2", "page": 4}],
+    )
+    assert "BE PROACTIVE" in sliced["Habit 1"]
+    assert "still habit" in sliced["Habit 1"]
+    assert "BEGIN" not in sliced["Habit 1"]
+    assert "BEGIN" in sliced["Habit 2"]
+    assert "BE PROACTIVE" not in sliced["Habit 2"]
+
+
+def test_slice_chapters_keeps_a_shared_page():
+    pdf = _pdf_with_pages(["shared page text"])
+    sliced = service.slice_chapters(
+        pdf,
+        [{"title": "A", "page": 1}, {"title": "B", "page": 1}],
+    )
+    assert "shared page text" in sliced["A"]
+    assert "shared page text" in sliced["B"]
 
 
 def test_chapter_pdf_filename_keeps_slash_titles_in_one_segment():
