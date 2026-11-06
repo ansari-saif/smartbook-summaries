@@ -9,7 +9,15 @@ from loguru import logger
 
 import jobs
 from logging_config import setup_logging
-from service import chapter_pdf_filename, data_dir, pdf_page_count, process_init, read_contents, safe_name
+from service import (
+    chapter_pdf_filename,
+    data_dir,
+    find_contents_page,
+    pdf_page_count,
+    process_init,
+    read_contents,
+    safe_name,
+)
 
 setup_logging()
 jobs.install_job_log_sink()
@@ -77,6 +85,19 @@ def _parse_chapters(raw: str, page_count: int) -> list[dict]:
         chapters.append({"title": title, "page": page, "end": end})
         previous = page
     return chapters
+
+
+@app.post("/contents-page")
+async def contents_page(pdf_file: UploadFile = File(...)):
+    logger.info("POST /contents-page file={!r}", pdf_file.filename)
+    pdf_content = await pdf_file.read()
+    if not pdf_content:
+        raise HTTPException(status_code=400, detail="PDF file is empty")
+    try:
+        return await asyncio.to_thread(find_contents_page, pdf_content)
+    except ValueError as e:
+        logger.warning("contents-page failed: {}", e)
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/contents")
@@ -155,7 +176,9 @@ async def get_job(job_id: str):
     job = jobs.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    return job.to_dict()
+    payload = job.to_dict()
+    payload["logs"] = job.recent_logs()
+    return payload
 
 
 @app.get("/jobs/{job_id}/events")

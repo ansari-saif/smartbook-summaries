@@ -71,6 +71,9 @@ class Job:
             ),
         }
 
+    def recent_logs(self, limit: int = 300) -> list[dict]:
+        return list(self.history[-limit:])
+
     def to_dict(self) -> dict:
         return {
             "job_id": self.id,

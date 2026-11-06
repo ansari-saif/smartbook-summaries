@@ -28,6 +28,7 @@ interface JobSummary {
   status: JobStatus;
   error: string | null;
   progress?: JobProgress | null;
+  logs?: JobLogLine[];
 }
 
 function readActiveJob(): string | null {
@@ -87,6 +88,7 @@ const Index = () => {
   const [bookName, setBookName] = useState('');
   const [contentsPage, setContentsPage] = useState('');
   const [readingContents, setReadingContents] = useState(false);
+  const [findingPage, setFindingPage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -103,6 +105,7 @@ const Index = () => {
   const pollRef = useRef<number | null>(null);
   const localSeq = useRef(0);
   const logBoxRef = useRef<HTMLDivElement | null>(null);
+  const logPanelRef = useRef<HTMLDivElement | null>(null);
   const loadBooksRef = useRef<() => Promise<void>>(async () => {});
 
   const loadBooks = () =>
@@ -189,6 +192,9 @@ const Index = () => {
         if (watchGen.current !== gen) return;
         setJobStatus(data.status);
         if (data.progress) setJobProgress(data.progress);
+        if (Array.isArray(data.logs)) {
+          for (const line of data.logs) appendLog(line);
+        }
         if (data.status === 'succeeded' || data.status === 'failed') {
           await finishJob(gen, data.status, data.error);
         }
@@ -254,7 +260,8 @@ const Index = () => {
     source.onerror = () => {
       if (watchGen.current !== gen || pollRef.current !== null) return;
       errors += 1;
-      if (errors < 3) return;
+      // A closed stream does not retry. A live one can blip, so wait for a few errors.
+      if (source.readyState !== EventSource.CLOSED && errors < 3) return;
       source.close();
       if (sourceRef.current === source) sourceRef.current = null;
       localSeq.current -= 1;
@@ -272,6 +279,10 @@ const Index = () => {
     const box = logBoxRef.current;
     if (box) box.scrollTop = box.scrollHeight;
   }, [jobLogs]);
+
+  useEffect(() => {
+    if (isSubmitting) logPanelRef.current?.scrollIntoView({ block: 'end' });
+  }, [isSubmitting]);
 
   useEffect(() => {
     loadBooksRef.current();
@@ -332,6 +343,27 @@ const Index = () => {
     setChapters([emptyChapter()]);
     setContentsPage('');
     setFormError('');
+  };
+
+  const findContentsPage = async () => {
+    if (!selectedFile || findingPage || readingContents) return;
+    setFindingPage(true);
+    setFormError('');
+    const formData = new FormData();
+    formData.append('pdf_file', selectedFile);
+    try {
+      const response = await fetch(api('/contents-page'), { method: 'POST', body: formData });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || typeof data.contents_page !== 'number') {
+        const detail = typeof data.detail === 'string' ? data.detail : `Could not find the contents page (${response.status})`;
+        throw new Error(detail);
+      }
+      setContentsPage(String(data.contents_page));
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Could not find the contents page.');
+    } finally {
+      setFindingPage(false);
+    }
   };
 
   const handleDrag = (event: React.DragEvent<HTMLLabelElement>, over: boolean) => {
@@ -439,7 +471,7 @@ const Index = () => {
 
   return (
     <div className="cloth min-h-[100dvh]">
-      <div className="mx-auto max-w-5xl px-5 pb-20 pt-10 sm:px-8 md:pt-16">
+      <div className={`mx-auto max-w-5xl px-5 pt-10 sm:px-8 md:pt-16 ${isSubmitting || jobLogs.length > 0 ? 'pb-64' : 'pb-20'}`}>
         <header className="flex flex-col items-center text-center">
           <span className="headband h-1.5 w-24 rounded-full" aria-hidden />
           <h1 className="foil mt-5 text-4xl font-medium sm:text-5xl md:text-6xl" style={{ letterSpacing: '0.22em' }}>
@@ -579,15 +611,23 @@ const Index = () => {
                 />
                 <button
                   type="button"
+                  onClick={() => void findContentsPage()}
+                  disabled={!selectedFile || findingPage || readingContents}
+                  className="foil-line h-12 px-4"
+                >
+                  {findingPage ? 'Finding…' : 'Find page'}
+                </button>
+                <button
+                  type="button"
                   onClick={() => void readContents()}
-                  disabled={!selectedFile || !contentsValid || readingContents}
+                  disabled={!selectedFile || !contentsValid || readingContents || findingPage}
                   className="foil-line h-12 px-4"
                 >
                   {readingContents ? 'Reading…' : 'Read contents'}
                 </button>
               </div>
               <p className="mt-2 font-stamp text-sm text-paper-muted">
-                The page number shown in the PDF viewer where the table of contents starts.
+                Find page fills this from the PDF. It is the page number shown in the viewer where the table of contents starts.
               </p>
             </fieldset>
 
@@ -660,39 +700,6 @@ const Index = () => {
               <button type="submit" className="foil-plate h-12 w-full sm:w-auto sm:px-10" disabled={!ready || isSubmitting}>
                 {isSubmitting ? 'Binding…' : 'Bind book'}
               </button>
-              {(isSubmitting || jobLogs.length > 0) && (
-                <div className="mt-4 max-w-prose">
-                  {isSubmitting && <div className="headband band-run h-1 w-full rounded-full" aria-hidden />}
-                  <p className="mt-3 font-stamp text-sm text-paper-muted" role="status">
-                    {isSubmitting
-                      ? 'Each chapter is being rewritten. You can refresh this page; processing continues and the log reconnects.'
-                      : jobStatus === 'succeeded'
-                        ? 'Binding finished.'
-                        : 'Binding stopped.'}
-                  </p>
-                  {isSubmitting && jobProgress && jobProgress.total > 0 && (
-                    <p className="mt-1 font-stamp text-sm text-paper">
-                      {formatEta(jobProgress.eta_seconds)} · {jobProgress.done} of {jobProgress.total}
-                    </p>
-                  )}
-                  {jobLogs.length > 0 && (
-                    <div
-                      ref={logBoxRef}
-                      role="log"
-                      aria-live="polite"
-                      aria-relevant="additions"
-                      className="mt-3 max-h-56 overflow-y-auto rounded-[3px] bg-black/40 px-3 py-2"
-                    >
-                      {jobLogs.map((line) => (
-                        <p key={line.seq} className="font-stamp text-xs leading-relaxed text-paper">
-                          <span className={`${levelClass(line.level)} mr-2 inline-block w-16`}>{line.level}</span>
-                          <span className="whitespace-pre-wrap">{line.message}</span>
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
               {formError && (
                 <p className="mt-3 font-stamp text-sm text-error" role="alert">
                   {formError}
@@ -702,6 +709,44 @@ const Index = () => {
           </form>
         </section>
       </div>
+      {(isSubmitting || jobLogs.length > 0) && (
+        <div
+          ref={logPanelRef}
+          className="fixed inset-x-0 bottom-0 z-20 border-t border-foil/40 bg-library-deep/95 px-5 py-3 backdrop-blur-sm sm:px-8"
+        >
+          <div className="mx-auto max-w-5xl">
+            {isSubmitting && <div className="headband band-run h-1 w-full rounded-full" aria-hidden />}
+            <p className="mt-2 font-stamp text-sm text-paper-muted" role="status">
+              {isSubmitting
+                ? 'Each chapter is being rewritten. You can refresh this page; processing continues and the log reconnects.'
+                : jobStatus === 'succeeded'
+                  ? 'Binding finished.'
+                  : 'Binding stopped.'}
+            </p>
+            {isSubmitting && jobProgress && jobProgress.total > 0 && (
+              <p className="mt-1 font-stamp text-sm text-paper">
+                {formatEta(jobProgress.eta_seconds)} · {jobProgress.done} of {jobProgress.total}
+              </p>
+            )}
+            {jobLogs.length > 0 && (
+              <div
+                ref={logBoxRef}
+                role="log"
+                aria-live="polite"
+                aria-relevant="additions"
+                className="mt-2 max-h-40 overflow-y-auto rounded-[3px] bg-black/40 px-3 py-2"
+              >
+                {jobLogs.map((line) => (
+                  <p key={line.seq} className="font-stamp text-xs leading-relaxed text-paper">
+                    <span className={`${levelClass(line.level)} mr-2 inline-block w-16`}>{line.level}</span>
+                    <span className="whitespace-pre-wrap">{line.message}</span>
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

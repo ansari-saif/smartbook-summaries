@@ -28,6 +28,18 @@ SUMMARY_SYSTEM = (
     "Summarize the following text in simple and easy-to-understand language. "
     "Avoid complex words and keep it brief."
 )
+GROUP_SYSTEM = (
+    "Group a book's table of contents into the chapters a reader would bind. "
+    "Reply with JSON only, no markdown: "
+    '{"chapters":[{"title":"Inside-Out","lines":[2]}]}. '
+    "lines are the index numbers from the list you are given. "
+    "Drop front matter, part dividers, appendices, and a closing interview. "
+    "Keep a standalone body chapter, such as Inside-Out or an overview. "
+    "Merge a habit or chapter heading with the Principles section directly under it "
+    "into one chapter titled '{heading} - {principles}'. "
+    "Keep other body chapters on their own, including a paradigms chapter and a later Inside-Out chapter. "
+    "Use each index at most once, and keep the chapters in list order."
+)
 
 
 def data_dir() -> Path:
@@ -264,6 +276,29 @@ def _looks_like_contents(text: str) -> bool:
     return all(len(line) <= _CONTENTS_LINE_LIMIT for line in lines)
 
 
+def _is_contents_heading(title: str) -> bool:
+    folded = _fold_title(title).strip(" .:;-")
+    return folded in {"contents", "table of contents"}
+
+
+def find_contents_page(pdf_content: bytes) -> dict:
+    """The PDF page where the table of contents starts. No model call."""
+    doc = _open_pdf(pdf_content)
+    try:
+        for _level, title, page in doc.get_toc():
+            if _is_contents_heading(title) and 1 <= page <= doc.page_count:
+                return {"contents_page": page, "page_count": doc.page_count}
+        for index in range(doc.page_count):
+            lines = _page_lines(doc[index])
+            if not any(_is_contents_heading(line) for line in lines):
+                continue
+            if _looks_like_contents(doc[index].get_text("text")):
+                return {"contents_page": index + 1, "page_count": doc.page_count}
+        raise ValueError("No contents page found in this PDF")
+    finally:
+        doc.close()
+
+
 def _split_contents_line(line: str) -> tuple[str, int | None]:
     match = _PRINTED_PAGE.match(line)
     if not match:
@@ -291,8 +326,93 @@ def _find_title_page(doc, folded_title: str, after_page: int) -> int | None:
     return None
 
 
+def _parse_group_reply(raw: str) -> list[dict]:
+    """Read the model's chapter groups. Pages are not taken from this reply."""
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Could not group the contents into chapters") from exc
+    if isinstance(parsed, dict):
+        parsed = parsed.get("chapters")
+    if not isinstance(parsed, list) or not parsed:
+        raise ValueError("Could not group the contents into chapters")
+    groups = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            raise ValueError("Could not group the contents into chapters")
+        title = item.get("title")
+        lines = item.get("lines")
+        if not isinstance(title, str) or not title.strip() or not isinstance(lines, list) or not lines:
+            raise ValueError("Could not group the contents into chapters")
+        indexes = []
+        for line in lines:
+            if isinstance(line, bool) or not isinstance(line, int):
+                raise ValueError("Could not group the contents into chapters")
+            indexes.append(line)
+        groups.append({"title": title.strip(), "lines": indexes})
+    return groups
+
+
+def _ask_chapter_groups(chapters: list[dict]) -> list[dict]:
+    """Ask which contents lines belong in each chapter. One short call."""
+    listing = [{"index": index, "title": chapter["title"]} for index, chapter in enumerate(chapters)]
+    raw = _chat(GROUP_SYSTEM, json.dumps(listing, ensure_ascii=False))
+    return _parse_group_reply(raw)
+
+
+def apply_chapter_groups(chapters: list[dict], groups: list[dict]) -> list[dict]:
+    """From is the first selected line's page. To is the last selected line's end."""
+    used: set[int] = set()
+    previous_index = -1
+    grouped: list[dict] = []
+    for group in groups:
+        title = group.get("title")
+        indexes = group.get("lines")
+        if not isinstance(title, str) or not title.strip() or not isinstance(indexes, list) or not indexes:
+            raise ValueError("Could not group the contents into chapters")
+        chosen = []
+        for index in indexes:
+            if isinstance(index, bool) or not isinstance(index, int):
+                raise ValueError("Could not group the contents into chapters")
+            if index < 0 or index >= len(chapters) or index in used:
+                raise ValueError("Could not group the contents into chapters")
+            chosen.append(index)
+            used.add(index)
+        if min(chosen) < previous_index:
+            raise ValueError("Could not group the contents into chapters")
+        previous_index = min(chosen)
+        selected = [chapters[index] for index in chosen]
+        pages = [item["page"] for item in selected if item["page"] is not None]
+        ends = [item["end"] for item in selected if item["end"] is not None]
+        if not pages:
+            grouped.append({"title": title.strip(), "page": None, "end": None})
+            continue
+        start = min(pages)
+        end = max(ends) if ends else start
+        if end < start:
+            end = start
+        if grouped and grouped[-1]["page"] is not None and start < grouped[-1]["page"]:
+            raise ValueError("Could not group the contents into chapters")
+        grouped.append({"title": title.strip(), "page": start, "end": end})
+    if not grouped:
+        raise ValueError("Could not group the contents into chapters")
+    return grouped
+
+
+def group_contents(chapters: list[dict]) -> list[dict]:
+    """Keep real chapters. A bad reply does not fall back to every contents line."""
+    try:
+        groups = _ask_chapter_groups(chapters)
+    except ValueError:
+        raise
+    except Exception as exc:
+        logger.warning("Chapter grouping failed: {}", exc)
+        raise ValueError("Could not group the contents into chapters") from exc
+    return apply_chapter_groups(chapters, groups)
+
+
 def read_contents(pdf_content: bytes, contents_page: int) -> dict:
-    """Titles from a contents page, each with the PDF page where it starts."""
+    """Real chapters from a contents page, each with its From and To PDF page."""
     if contents_page < 1:
         raise ValueError("contents_page must be a 1-based page number")
     doc = _open_pdf(pdf_content)
@@ -327,8 +447,9 @@ def read_contents(pdf_content: bytes, contents_page: int) -> dict:
                 page = printed
             chapters.append({"title": title, "page": page, "end": None})
         _assign_ends(chapters, doc.page_count)
+        chapters = group_contents(chapters)
         logger.info(
-            "Contents page {} yielded {} titles (pdf has {} pages)",
+            "Contents page {} yielded {} chapters (pdf has {} pages)",
             contents_page,
             len(chapters),
             doc.page_count,

@@ -300,6 +300,15 @@ def test_contents_uses_outline_pages_for_split_headings():
     ]
 
 
+def test_contents_page_finds_the_heading():
+    response = client.post(
+        "/contents-page",
+        files={"pdf_file": ("book.pdf", _contents_pdf(), "application/pdf")},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {"contents_page": 1, "page_count": 3}
+
+
 def test_contents_page_past_the_end_is_400():
     response = client.post(
         "/contents",
@@ -403,6 +412,9 @@ def test_sse_omits_debug_logs(tmp_path, monkeypatch):
     assert "HIDDENDEBUG" not in messages
     assert "VISIBLEINFO Demo Book" in messages
     assert all(event["data"]["level"] != "DEBUG" for event in events if event["event"] == "log")
+    job = client.get(f"/jobs/{job_id}").json()
+    assert any("VISIBLEINFO Demo Book" in line["message"] for line in job["logs"])
+    assert all("HIDDENDEBUG" not in line["message"] for line in job["logs"])
 
 
 def test_sse_replays_logs_and_terminal_status(tmp_path, monkeypatch):

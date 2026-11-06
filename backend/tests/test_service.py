@@ -2,6 +2,8 @@ import fitz
 
 import service
 
+_ask_chapter_groups = service._ask_chapter_groups
+
 
 def _pdf_with_pages(pages: list[str], outline: list | None = None) -> bytes:
     doc = fitz.open()
@@ -80,6 +82,36 @@ def test_read_contents_matches_outline_across_dash_characters():
     assert result["page_count"] == 2
 
 
+def test_find_contents_page_uses_the_outline_and_ignores_the_word_in_prose():
+    pdf = _pdf_with_pages(
+        [
+            "Copyright. The cover art and special contents of this edition may not be reproduced in any form.",
+            "CONTENTS\nForeword\nInside-Out\nOverview",
+        ],
+        outline=[[1, "Contents", 2]],
+    )
+    assert service.find_contents_page(pdf) == {"contents_page": 2, "page_count": 2}
+
+
+def test_find_contents_page_reads_a_heading_when_there_is_no_outline():
+    pdf = _pdf_with_pages(
+        [
+            "A long opening page about special contents that is definitely longer than a contents line and should not match.",
+            "Table of Contents\nOne\nTwo\nThree",
+        ]
+    )
+    assert service.find_contents_page(pdf)["contents_page"] == 2
+
+
+def test_find_contents_page_rejects_a_book_with_no_contents():
+    pdf = _pdf_with_pages(["Just a chapter.\nIt has several sentences.\nNone of them is a contents heading."])
+    try:
+        service.find_contents_page(pdf)
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "No contents page" in str(exc)
+
+
 def test_read_contents_rejects_a_page_past_the_end():
     pdf = _pdf_with_pages(["CONTENTS\nOne\nTwo\nThree"])
     try:
@@ -99,6 +131,43 @@ def test_read_contents_sets_a_shared_page_as_from_and_to():
         {"title": "Habit 7", "page": 3, "end": 3},
         {"title": "Principles", "page": 3, "end": 3},
     ]
+
+
+def test_apply_chapter_groups_merges_a_habit_with_its_principles():
+    lines = [
+        {"title": "Foreword to the 25th Anniversary Edition by Jim Collins", "page": 22, "end": 26},
+        {"title": "PART ONE: PARADIGMS AND PRINCIPLES", "page": 35, "end": 35},
+        {"title": "Inside-Out", "page": 36, "end": 57},
+        {"title": "The 7 Habits\u2014An Overview", "page": 58, "end": 70},
+        {"title": "PART TWO: PRIVATE VICTORY", "page": 71, "end": 71},
+        {"title": "HABIT 1: Be Proactive", "page": 72, "end": 80},
+        {"title": "Principles of Personal Vision", "page": 73, "end": 93},
+    ]
+    groups = [
+        {"title": "Inside-Out", "lines": [2]},
+        {"title": "The 7 Habits\u2014An Overview", "lines": [3]},
+        {"title": "HABIT 1: Be Proactive - Principles of Personal Vision", "lines": [5, 6]},
+    ]
+    assert service.apply_chapter_groups(lines, groups) == [
+        {"title": "Inside-Out", "page": 36, "end": 57},
+        {"title": "The 7 Habits\u2014An Overview", "page": 58, "end": 70},
+        {"title": "HABIT 1: Be Proactive - Principles of Personal Vision", "page": 72, "end": 93},
+    ]
+
+
+def test_group_contents_rejects_an_unusable_reply(monkeypatch):
+    monkeypatch.setattr(service, "_chat", lambda *_args, **_kwargs: "not json")
+    monkeypatch.setattr(service, "_ask_chapter_groups", _ask_chapter_groups)
+    lines = [
+        {"title": "Foreword", "page": 22, "end": 26},
+        {"title": "Inside-Out", "page": 36, "end": 57},
+    ]
+    try:
+        service.group_contents(lines)
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert str(exc) == "Could not group the contents into chapters"
+        assert "Foreword" not in str(exc)
 
 
 def test_slice_chapters_stops_at_the_given_end_page():
