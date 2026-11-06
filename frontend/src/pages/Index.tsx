@@ -166,10 +166,10 @@ const Index = () => {
       setFormError('');
       await loadBooksRef.current();
       setSelectedFile(null);
-      setChapters(['']);
+      setChapters([emptyChapter()]);
       setBookName('');
-      setStartPage('');
-      setEndPage('');
+      setContentsPage('');
+      setPageCount(null);
     } else if (status === 'failed') {
       setFormError(error || 'Binding failed.');
     }
